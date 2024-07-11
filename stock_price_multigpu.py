@@ -9,8 +9,6 @@ import math
 
 TICKERS = [
     "SMCI",
-    "NVDA",
-    "TSM"
 ]
 
 TOKEN_OFFSET = 1
@@ -18,14 +16,14 @@ run_predict = input("run predict (y/n, default n)?:")
 if not run_predict:
     run_predict = 'n'
 max_gen_token = 4
-batch_size = 6
-block_size = 512
+batch_size = 16
+block_size = 8
 block_split = 3
-n_embed = 4096
-n_head = 16
-n_layer = 8
-lr = 1e-5
-epoch = 1e4
+n_embed = 8192
+n_head = 2
+n_layer = 2
+lr = 1e-3
+epoch = 10
 cuda0 = "cuda:0"
 cuda1 = "cuda:1"
 if torch.cuda.device_count() == 1:
@@ -35,7 +33,7 @@ class DataFrame(object):
     def __init__(self):
         self.data = None
         for ticker in TICKERS:
-            hist = yf.download(ticker, period="1mo", interval="2m").to_numpy()
+            hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
             if self.data is None:
                     self.data = hist[:, :-1]
             else:
@@ -171,6 +169,7 @@ class LLM(torch.nn.Module):
         self.block_size = block_size
         self.embedding1 = torch.nn.Linear(n_features, n_embed).to(cuda1)
         self.position_embedding_table = PositionalEncoding(n_embed).to(cuda1)
+        # self.position_embedding_table = torch.nn.Embedding(block_size, n_embed).to(cuda1)
         self.blocks = torch.nn.Sequential(*[Block(
             n_embed, n_head, block_size) for _ in range(n_layer)])
         for i, block in enumerate(self.blocks):
@@ -199,9 +198,12 @@ class LLM(torch.nn.Module):
 
     def forward(self, index, targets):
         # B, T
+        # print("tokens is %s, \ntargets is %s" % (index, targets))
         B, T, C = index.shape
         logits = self.embedding1(index)
         logits = self.position_embedding_table(logits)
+        # logits = logits + self.position_embedding_table(
+        #    torch.arange(self.block_size, device=logits.device))
         for i, block in enumerate(self.blocks):
             if i < self.block_split:
                 logits = block(logits)
@@ -221,7 +223,7 @@ class LLM(torch.nn.Module):
         
 
     @torch.no_grad() 
-    def generate(self, index, max_gen_token=500, checkpoint_path=None):
+    def generate(self, index, max_gen_token=500, checkpoint_path=None, targets=None):
         checkpoint = None
         print("Generating from path %s" %(checkpoint_path))
         if checkpoint_path is not None and os.path.exists(checkpoint_path):
@@ -231,11 +233,12 @@ class LLM(torch.nn.Module):
                 checkpoint = torch.load(checkpoint_path)
             self.load_state_dict(checkpoint['model_state_dict'])
         else:
-            raise SystemError("No checkpoint available.")
+            pass
+            # raise SystemError("No checkpoint available.")
         for i in range(max_gen_token):
             offset = i * TOKEN_OFFSET
             tokens = index[:,offset:,:]
-            logits, loss = self.forward(tokens, None)
+            logits, loss = self.forward(tokens, targets)
             plt.plot(logits[:,:,1].flatten().cpu().numpy(), label=str(i))
             logits = logits[:, -TOKEN_OFFSET:, :].to(index.device)
             index = torch.cat((index, logits), dim=1)
@@ -282,7 +285,8 @@ class LLM(torch.nn.Module):
 def predict(llm, block_size, data, ix=0, checkpoint_path=None):
     # x, y = data.getBatch(1, block_size)
     x, y = data.getInputWithIx(block_size, 0)
-    predict = llm.generate(x, max_gen_token=max_gen_token, checkpoint_path=checkpoint_path)
+    predict, _ = llm.generate(x, max_gen_token=max_gen_token,
+        checkpoint_path=checkpoint_path, targets=y)
     return predict
 
 data = DataFrame()
