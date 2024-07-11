@@ -15,15 +15,15 @@ TOKEN_OFFSET = 1
 run_predict = input("run predict (y/n, default n)?:")
 if not run_predict:
     run_predict = 'n'
-max_gen_token = 4
+max_gen_token = 32
 batch_size = 16
 block_size = 8
-block_split = 3
+block_split = 1
 n_embed = 8192
 n_head = 2
 n_layer = 2
 lr = 1e-3
-epoch = 10
+epoch = 10000
 cuda0 = "cuda:0"
 cuda1 = "cuda:1"
 if torch.cuda.device_count() == 1:
@@ -33,7 +33,7 @@ class DataFrame(object):
     def __init__(self):
         self.data = None
         for ticker in TICKERS:
-            hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
+            hist = yf.download(ticker, period="1mo", interval="2m").to_numpy()
             if self.data is None:
                     self.data = hist[:, :-1]
             else:
@@ -233,8 +233,7 @@ class LLM(torch.nn.Module):
                 checkpoint = torch.load(checkpoint_path)
             self.load_state_dict(checkpoint['model_state_dict'])
         else:
-            pass
-            # raise SystemError("No checkpoint available.")
+            raise SystemError("No checkpoint available.")
         for i in range(max_gen_token):
             offset = i * TOKEN_OFFSET
             tokens = index[:,offset:,:]
