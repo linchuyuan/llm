@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 import yfinance as yf
 import matplotlib.pyplot as plt
 import numpy as np
@@ -13,26 +13,29 @@ TICKERS = [
     "TSM"
 ]
 
-TOKEN_OFFSET = 12
+TOKEN_OFFSET = 1
 run_predict = input("run predict (y/n, default n)?:")
 if not run_predict:
     run_predict = 'n'
-max_gen_token = 100
-batch_size = 1
-block_size = 1024
-n_embed = 2560
-n_head = 12
-n_layer = 12
-lr = 1e-7
-epoch = 3e4
-cuda0 = "cuda"
-cuda1 = "cuda"     
+max_gen_token = 4
+batch_size = 6
+block_size = 512
+block_split = 3
+n_embed = 4096
+n_head = 16
+n_layer = 8
+lr = 1e-5
+epoch = 1e4
+cuda0 = "cuda:0"
+cuda1 = "cuda:1"
+if torch.cuda.device_count() == 1:
+    cuda1 = "cuda:0"
 
 class DataFrame(object):
     def __init__(self):
         self.data = None
         for ticker in TICKERS:
-            hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
+            hist = yf.download(ticker, period="1mo", interval="2m").to_numpy()
             if self.data is None:
                     self.data = hist[:, :-1]
             else:
@@ -55,7 +58,7 @@ class DataFrame(object):
         ix = torch.randint(len(training_data) - block_size - token_offset, (batch_size,))
         x = torch.stack([ training_data[i:i+block_size] for i in ix])
         y = torch.stack([ training_data[i+token_offset:i+block_size+token_offset] for i in ix])
-        y = y[:,:,1].unsqueeze(2)
+        # y = y[:,:,1].unsqueeze(2)
         x, y = x.to(cuda1), y.to(cuda0)
         return x, y
 
@@ -106,7 +109,7 @@ class MultiHeadAttention(torch.nn.Module):
 class FeedFoward(torch.nn.Module):
     def __init__(self, n_embed):
         super().__init__()
-        hiddenshape = 512
+        hiddenshape = n_embed
         self.net = torch.nn.Sequential(
             torch.nn.Linear(n_embed, hiddenshape),
             torch.nn.ReLU(),
@@ -151,7 +154,7 @@ class PositionalEncoding(torch.nn.Module):
     
     def forward(self, x):
         # Add positional encoding to input tensor
-        x = x / torch.sqrt(torch.tensor(self.d_model, dtype=torch.float32))
+        # x = x / torch.sqrt(torch.tensor(self.d_model, dtype=torch.float32))
         seq_len = x.size(1)
         if seq_len > self.max_len:
             raise RuntimeError("Input sequence length exceeds maximum positional encoding length.")
@@ -163,7 +166,7 @@ class PositionalEncoding(torch.nn.Module):
 class LLM(torch.nn.Module):
 
     def __init__(self, block_size, n_features, n_embed, n_head, n_layer):
-        self.block_split = 0
+        self.block_split = block_split
         super().__init__()
         self.block_size = block_size
         self.embedding1 = torch.nn.Linear(n_features, n_embed).to(cuda1)
@@ -177,7 +180,7 @@ class LLM(torch.nn.Module):
                 block.to(cuda0)
         self.layernorm = torch.nn.LayerNorm(n_embed, eps=1e-6).to(cuda0)
         self.final_linear1 = torch.nn.Linear(n_embed, n_features).to(cuda0)
-        self.final_linear2 = torch.nn.Linear(n_features, 1).to(cuda0)
+        # self.final_linear2 = torch.nn.Linear(n_features, 1).to(cuda0)
         self.loss = torch.nn.MSELoss()
 
     @torch.no_grad() 
@@ -208,11 +211,11 @@ class LLM(torch.nn.Module):
                 logits = block(logits)
         logits = logits + self.layernorm(logits)
         logits = self.final_linear1(logits)
-        logits = self.final_linear2(logits)
-        logits = logits[:,-TOKEN_OFFSET:].flatten()
+        # logits = self.final_linear2(logits)
+        # logits = logits[:,-TOKEN_OFFSET:].flatten()
         if targets is None:
             return logits, None
-        targets = targets[:,-TOKEN_OFFSET:].flatten()
+        # targets = targets[:,-TOKEN_OFFSET:].flatten()
         loss = self.loss(logits, targets)
         return logits, loss
         
@@ -222,20 +225,22 @@ class LLM(torch.nn.Module):
         checkpoint = None
         print("Generating from path %s" %(checkpoint_path))
         if checkpoint_path is not None and os.path.exists(checkpoint_path):
-            checkpoint = torch.load(checkpoint_path)
+            if torch.cuda.device_count() == 1:
+                checkpoint = torch.load(checkpoint_path, map_location=torch.device(cuda0))
+            else:
+                checkpoint = torch.load(checkpoint_path)
             self.load_state_dict(checkpoint['model_state_dict'])
         else:
             raise SystemError("No checkpoint available.")
         for i in range(max_gen_token):
-            """
             offset = i * TOKEN_OFFSET
             tokens = index[:,offset:,:]
             logits, loss = self.forward(tokens, None)
+            plt.plot(logits[:,:,1].flatten().cpu().numpy(), label=str(i))
             logits = logits[:, -TOKEN_OFFSET:, :].to(index.device)
             index = torch.cat((index, logits), dim=1)
-            """
-            logits, loss = self.forward(index, None)
-            return logits
+            # logits, loss = self.forward(index, None)
+            # return logits
         return index
 
     def train_and_update(self, get_batch, batch_size, block_size, lr,
@@ -278,7 +283,6 @@ def predict(llm, block_size, data, ix=0, checkpoint_path=None):
     # x, y = data.getBatch(1, block_size)
     x, y = data.getInputWithIx(block_size, 0)
     predict = llm.generate(x, max_gen_token=max_gen_token, checkpoint_path=checkpoint_path)
-    print(predict)
     return predict
 
 data = DataFrame()
@@ -289,14 +293,14 @@ path = "model_nhead%s_nlayer%s_nfeature%s_nembed%s_offset%s.pt" % (n_head,
     n_layer, n_features, n_embed, TOKEN_OFFSET)
 llm = LLM(block_size, n_features, n_embed, n_head, n_layer)
 if run_predict == 'y':
-    ix = 0
+    ix = 2000
     x = predict(llm, block_size, data, ix=ix, checkpoint_path=path)
     # x = x.reshape(block_size)
-    predicted_data = torch.tensor(data.raw()[:,1])
-    # predicted_data[ix+block_size:ix+block_size+TOKEN_OFFSET] = x[-TOKEN_OFFSET:]
-    predicted_data[ix+block_size:ix+block_size+TOKEN_OFFSET] = x
-    plt.plot(data.raw()[:,1].cpu().numpy()[ix+block_size-TOKEN_OFFSET:ix+block_size+2*TOKEN_OFFSET], label="Actual")
-    plt.plot(predicted_data.cpu().numpy()[ix+block_size-TOKEN_OFFSET:ix+block_size+2*TOKEN_OFFSET], label="Predicted")
+    predicted_data = data.raw()[:,1].clone().detach().to(x.device)
+    predicted_data = predicted_data[:-TOKEN_OFFSET]
+    predicted_data = torch.concatenate((predicted_data[ix:ix+block_size], x[:,block_size:,1].flatten()), dim=0)
+    plt.plot(data.raw()[:,1].cpu().numpy()[ix:ix + len(predicted_data)], label="Actual")
+    plt.plot(predicted_data.cpu().numpy(), label="Predicted")
     plt.legend()
     plt.show()
 else:
