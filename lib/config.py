@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import torch
+FORCE_CPU = False
 
 class Config(object):
 
@@ -22,7 +23,7 @@ class Config(object):
 
     def cuda(self, idx: int):
         cuda_device_count = torch.cuda.device_count()
-        if cuda_device_count == 0:
+        if cuda_device_count == 0 or FORCE_CPU:
             return "cpu"
         return "cuda:%s" % (idx % cuda_device_count)
 
