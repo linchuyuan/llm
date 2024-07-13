@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 import torch
 
 from lib.multi_head import MultiHeadAttention
@@ -10,7 +10,8 @@ class EncoderBlock(torch.nn.Module):
     def __init__(self, n_embed, n_head, block_size):
         super().__init__()
         head_size = n_embed // n_head
-        self.sa = MultiHeadAttention(n_head, n_embed, head_size, block_size, masked=False)
+        self.sa = MultiHeadAttention(
+                n_head, n_embed, head_size, block_size, masked=False)
         self.ffwd = FeedForward(n_embed)
         self.ln1 = torch.nn.LayerNorm(n_embed, eps=1e-6)
         self.ln2 = torch.nn.LayerNorm(n_embed, eps=1e-6)

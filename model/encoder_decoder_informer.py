@@ -30,11 +30,9 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
                 config.n_embed, config.n_decoder_block_size).to(self.config.cuda1)
-        self.decoder_ma_masked = DecoderBlock(
-                config.n_embed, config.n_decoder_head, config.n_decoder_block_size)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
             config.n_embed, config.n_decoder_head,
-            config.n_decoder_block_size) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
+            config.n_decoder_block_size, masked=False) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
 
         # final mapping
         self.final_linear1 = torch.nn.Linear(config.n_embed, config.n_features).to(self.config.cuda1)

@@ -3,7 +3,7 @@ import torch
 import math
 
 class Head(torch.nn.Module):
-    def __init__(self, head_size, n_embed, block_size, masked=True):
+    def __init__(self, head_size, n_embed, block_size, masked):
         super().__init__()
         self.q = torch.nn.Linear(n_embed, head_size, bias=False)
         self.k = torch.nn.Linear(n_embed, head_size, bias=False)
