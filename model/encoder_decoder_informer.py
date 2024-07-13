@@ -23,21 +23,23 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
                 config.n_embed, config.n_encoder_block_size).to(self.config.cuda0)
         self.encoder_blocks = torch.nn.Sequential(*[EncoderBlock(
             config.n_embed, config.n_encoder_head,
-            config.n_encoder_block_size) for _ in range(config.n_encoder_layer)])
+            config.n_encoder_block_size) for _ in range(config.n_encoder_layer)]).to(config.cuda0)
 
         # decoder block
         self.decoder_embedding = torch.nn.Linear(
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
                 config.n_embed, config.n_decoder_block_size).to(self.config.cuda1)
+        self.decoder_ma_masked = DecoderBlock(
+                config.n_embed, config.n_decoder_head, config.n_decoder_block_size)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
             config.n_embed, config.n_decoder_head,
-            config.n_decoder_block_size) for _ in range(config.n_decoder_layer)])
+            config.n_decoder_block_size) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
 
         # final mapping
         self.final_linear1 = torch.nn.Linear(config.n_embed, config.n_features).to(self.config.cuda1)
-        self.layernorm = torch.nn.LayerNorm(config.n_features, eps=1e-6).to(self.config.cuda1)
-        self.final_linear2 = torch.nn.Linear(config.n_features, config.n_features).to(self.config.cuda1)
+        # self.layernorm = torch.nn.LayerNorm(config.n_features, eps=1e-6).to(self.config.cuda1)
+        # self.final_linear2 = torch.nn.Linear(config.n_features, config.n_features).to(self.config.cuda1)
         self.loss = torch.nn.MSELoss()
 
     def forward(self, index, targets):
@@ -46,19 +48,19 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
         B, T, C = index.shape
 
         # encoder
-        logits = self.encoder_embedding(index)
-        logits = self.encoder_position_embedding_table(logits)
-        memory = self.encoder_blocks(logits)
+        encoder_logits = self.encoder_embedding(index)
+        encoder_logits = self.encoder_position_embedding_table(encoder_logits)
+        memory = self.encoder_blocks(encoder_logits)
 
         # decoder
-        logits = self.decoder_embedding(targets)
-        logits = self.decoder_position_embedding_table(logits)
-        logits, _ = self.decoder_blocks((logits, memory))
+        decoder_logits = self.decoder_embedding(targets)
+        decoder_logits = self.decoder_position_embedding_table(decoder_logits)
+        decoder_logits, _ = self.decoder_blocks((decoder_logits, memory.to(decoder_logits.device)))
 
         # final mapping
-        logits = self.final_linear1(logits)
-        logits = self.layernorm(logits)
-        logits = self.final_linear2(logits)
+        logits = self.final_linear1(decoder_logits)
+        # logits = self.layernorm(logits)
+        # logits = self.final_linear2(logits)
         loss = self.loss(logits, targets)
         return logits, loss
 
