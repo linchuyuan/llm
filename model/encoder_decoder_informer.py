@@ -51,7 +51,9 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
         memory = self.encoder_blocks(encoder_logits)
 
         # decoder
-        decoder_logits = self.decoder_embedding(targets)
+        tgt = targets.clone().detach().to(targets.device)
+        tgt[:,-self.config.token_offset:,:] = 0
+        decoder_logits = self.decoder_embedding(tgt)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
         decoder_logits, _ = self.decoder_blocks((decoder_logits, memory.to(decoder_logits.device)))
 
