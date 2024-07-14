@@ -18,6 +18,7 @@ class DataFrame(object):
                     self.data = np.concatenate((self.data, hist[:len(self.data),:-1]), axis=1)
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data)
+        print("data shape is ", self.data.shape)
         self.feature_device = feature_device
         self.label_device = label_device
         self.token_offset = token_offset
