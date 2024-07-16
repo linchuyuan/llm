@@ -10,10 +10,10 @@ from lib.decoder import DecoderBlock
 from lib.sinusoidal_position_embedding import SinusoidalPositionalEmbedding
 from lib.config import Config
 
-class EncoderDecoderInformer(DecoderOnlyInformer):
+class EncoderDecoderInformer(torch.nn.Module):
 
     def __init__(self, config : Config):
-        super(DecoderOnlyInformer, self).__init__()
+        super().__init__()
         self.config = config
 
         # encoder block
@@ -51,7 +51,7 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
         memory = self.encoder_blocks(encoder_logits)
 
         # decoder
-        tgt = targets.clone().detach().to(targets.device)
+        tgt = targets.clone()
         tgt[:,-self.config.token_offset:,:] = 0
         decoder_logits = self.decoder_embedding(tgt)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
@@ -63,6 +63,21 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
         # logits = self.final_linear2(logits)
         loss = self.loss(logits, targets)
         return logits, loss
+
+    @torch.no_grad()
+    def estimate_loss(self, get_batch, batch_size,
+                      src_block_size, tgt_block_size, eval_iters=200):
+        out = {}
+        self.eval()
+        for split in ['train', 'val']:
+            losses = torch.zeros(eval_iters)
+            for k in range(eval_iters):
+                x, y = get_batch(batch_size, src_block_size, tgt_block_size,  split)
+                logits, loss = self.forward(x, y)
+                losses[k] = loss.item()
+            out[split] = losses.mean()
+        self.train()
+        return out
 
     @torch.no_grad()
     def generate(self, index, target, checkpoint_path=None):
@@ -77,7 +92,47 @@ class EncoderDecoderInformer(DecoderOnlyInformer):
         else:
             raise SystemError("No checkpoint available.")
 
-        tgt = target.clone().detach().to(target.device)
+        tgt = target.clone()
         tgt[:,-self.config.token_offset:,:] = 0
         logits, loss = self.forward(index, tgt)
         return logits
+
+    def train_and_update(self, get_batch, batch_size,  lr,
+                         epoch, src_block_size, tgt_block_size=None,
+                         eval_interval=1e3, checkpoint_path=None):
+        if tgt_block_size is None:
+            tgt_block_size = src_block_size
+
+        optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=5e-4)
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10)
+        checkpoint = None
+        if checkpoint_path is not None and os.path.exists(checkpoint_path):
+            print("Resume from %s..." % checkpoint_path)
+            checkpoint = torch.load(checkpoint_path)
+            try:
+                self.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                del checkpoint
+                torch.cuda.empty_cache()
+            except:
+                print("Unable to restore from previous checkpoint, restaring...")
+        else:
+            print("Clean run starts")
+        print("starting")
+        for i in range(int(epoch)):
+            if i % eval_interval == 0 and i != 0:
+                losses = self.estimate_loss(get_batch, batch_size, src_block_size, tgt_block_size)
+                print(f"step {i}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+                torch.save({
+                    'model_state_dict': self.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                }, checkpoint_path)
+                scheduler.step(losses['val'])  # Step the scheduler with the validation loss
+
+            x, y = get_batch(batch_size, src_block_size, tgt_block_size)
+            logits, loss = self.forward(x, y)
+            print("Loop %s, %s" % (i, loss.item()), end='\r')
+            optimizer.zero_grad(set_to_none=True)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)  # Gradient clipping
+            optimizer.step()

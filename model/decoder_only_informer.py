@@ -35,21 +35,6 @@ class DecoderOnlyInformer(torch.nn.Module):
         self.final_linear2 = torch.nn.Linear(config.n_features, config.n_features).to(self.config.cuda1)
         self.loss = torch.nn.MSELoss()
 
-    @torch.no_grad()
-    def estimate_loss(self, get_batch, batch_size,
-                      src_block_size, tgt_block_size, eval_iters=200):
-        out = {}
-        self.eval()
-        for split in ['train', 'val']:
-            losses = torch.zeros(eval_iters)
-            for k in range(eval_iters):
-                x, y = get_batch(batch_size, src_block_size, tgt_block_size,  split)
-                logits, loss = self.forward(x, y)
-                losses[k] = loss.item()
-            out[split] = losses.mean()
-        self.train()
-        return out
-
     def forward(self, index, targets):
         # B, T
         # print("tokens is %s, \ntargets is %s" % (index, targets))
