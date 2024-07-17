@@ -10,6 +10,7 @@ class FeedForward(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.Dropout(0.1),
             torch.nn.Linear(hiddenshape, n_embed),
+            torch.nn.Dropout(0.1),
         )
 
     def forward(self, x):

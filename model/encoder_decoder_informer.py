@@ -3,6 +3,7 @@ import torch
 import os
 import matplotlib.pyplot as plt
 import pdb
+import time
 
 from model.decoder_only_informer import DecoderOnlyInformer
 from lib.encoder import EncoderBlock
@@ -102,7 +103,7 @@ class EncoderDecoderInformer(torch.nn.Module):
                          eval_interval=1e3, checkpoint_path=None):
         if tgt_block_size is None:
             tgt_block_size = src_block_size
-
+        start_time = time.time()
         optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=5e-4)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=10)
         checkpoint = None
@@ -131,7 +132,8 @@ class EncoderDecoderInformer(torch.nn.Module):
 
             x, y = get_batch(batch_size, src_block_size, tgt_block_size)
             logits, loss = self.forward(x, y)
-            print("Loop %s, %s" % (i, loss.item()), end='\r')
+            print("Loop %s, %s, speed %s b/s" % (
+                i, loss.item(), round(i / (time.time() - start_time), 2)), end='\r')
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)  # Gradient clipping
