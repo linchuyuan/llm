@@ -11,7 +11,7 @@ class DecoderBlock(torch.nn.Module):
         super().__init__()
         head_size = n_embed // n_head
         self.attention_masked = MultiHeadAttention(
-                n_head, n_embed, head_size, block_size, masked=True)
+                n_head, n_embed, head_size, block_size, masked=False)
         self.attention_unmasked = MultiHeadAttention(
                 n_head, n_embed, head_size, block_size, masked=False)
         self.ffwd = FeedForward(n_embed)
@@ -23,11 +23,8 @@ class DecoderBlock(torch.nn.Module):
     def forward(self, args: tuple):
         index, memory = args[0], args[1]
         index = index + self.attention_masked(
-                index, None)
-        index = self.ln1(index)
+                self.ln1(index), None)
         index = index + self.attention_unmasked(
-                index, memory)
-        index = self.ln2(index)
-        index = index + self.ffwd(index)
-        index = self.ln3(index)
+                self.ln2(index), memory)
+        index = index + self.ffwd(self.ln3(index))
         return (index, memory)

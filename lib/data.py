@@ -8,7 +8,7 @@ class DataFrame(object):
     def __init__(self, ticker_list, feature_device, label_device, token_offset):
         self.data = None
         for ticker in ticker_list:
-            hist = yf.download(ticker, period="1mo", interval="2m").to_numpy()
+            hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
             if self.data is None:
                     self.data = hist[:, :-1]
             else:
