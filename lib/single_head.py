@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import torch
+import pdb
 import math
 
 class Head(torch.nn.Module):
@@ -10,13 +11,15 @@ class Head(torch.nn.Module):
         self.q = torch.nn.Linear(n_embed, head_size, bias=False)
         self.k = torch.nn.Linear(n_embed, head_size, bias=False)
         self.v = torch.nn.Linear(n_embed, head_size, bias=False)
-        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
         self.masked = masked
+        if self.masked:
+            self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
 
     def forward(self, index, memory):
         if memory is None:
             memory = index
 
+        _, T, _ = index.shape
         q = self.q(index) # B, T, head_size
         # print("q weights %s" % torch.sum(self.q.weight))
         k = self.k(memory) # B, T, head_size

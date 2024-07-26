@@ -8,6 +8,7 @@ import time
 from model.decoder_only_informer import DecoderOnlyInformer
 from lib.encoder import EncoderBlock
 from lib.decoder import DecoderBlock
+from lib.final_mapping_attention_block import FinalMappingAttentionBlock
 from lib.sinusoidal_position_embedding import SinusoidalPositionalEmbedding
 from lib.token_embedding import TokenEmbedding
 from lib.config import Config
@@ -27,14 +28,18 @@ class EncoderDecoderInformer(torch.nn.Module):
             config.n_embed, config.n_encoder_head,
             config.n_encoder_block_size) for _ in range(config.n_encoder_layer)]).to(config.cuda0)
 
+
         # decoder block
         self.decoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
-                config.n_embed, config.n_decoder_block_size).to(self.config.cuda1)
+                config.n_embed, config.n_target_data_size).to(self.config.cuda1)
+
+        self.final_self_attention = FinalMappingAttentionBlock(config.n_embed).to(config.cuda1)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
             config.n_embed, config.n_decoder_head,
-            config.n_decoder_block_size) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
+            config.n_predict_block_size) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
+
 
         # final mapping
         self.final_linear1 = torch.nn.Linear(config.n_embed, config.n_features).to(self.config.cuda1)
@@ -51,15 +56,18 @@ class EncoderDecoderInformer(torch.nn.Module):
         memory = self.encoder_blocks(encoder_logits)
 
         # decoder
-        B, T, C = targets.shape
-        tgt = targets[:, :T // 2, :]
-        pred = targets[:, T // 2:, :]
-        decoder_logits = self.decoder_embedding(tgt)
+        pred = targets[:, -self.config.n_predict_block_size:, :].clone().detach()
+        targets = targets[:, :self.config.n_decoder_block_size, :]
+        decoder_logits = self.decoder_embedding(targets)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
+        decoder_logits = self.final_self_attention(
+            decoder_logits[:, -self.config.n_predict_block_size:, :], decoder_logits)
+
         decoder_out, _ = self.decoder_blocks((decoder_logits, memory.to(decoder_logits.device)))
 
         # final mapping
         logits = self.final_linear1(decoder_out)
+        # logits = logits[:, -self.config.n_predict_block_size:, :]
 
         loss = self.loss(logits, pred)
         return logits, loss

@@ -28,16 +28,16 @@ class Config(object):
         return "cuda:%s" % (idx % cuda_device_count)
 
     def decoderOnlyInformerCheckpointPath(self):
-        return "model_nhead%s_nlayer%s_nfeature%s_nembed%s_offset%s.pt" % (
+        return "model_nhead%s_nlayer%s_nfeature%s_nembed%s_predict%s.pt" % (
             self.n_head,
             self.n_layer,
             self.n_features,
             self.n_embed,
-            self.token_offset
+            self.n_predict_block_size,
         )
 
     def informerCheckpointPath(self):
-        return "model_nDH%s_nDL%s_nDB%s_nEH%s_nEL%s_nEB%s_nembed%s_nfeature%s_offset%s.pt" % (
+        return "model_nDH%s_nDL%s_nDB%s_nEH%s_nEL%s_nEB%s_nembed%s_nfeature%s_predict%s.pt" % (
             self.n_decoder_head,
             self.n_decoder_layer,
             self.n_decoder_block_size,
@@ -46,5 +46,5 @@ class Config(object):
             self.n_encoder_block_size,
             self.n_embed,
             self.n_features,
-            self.token_offset,
+            self.n_predict_block_size,
         )
