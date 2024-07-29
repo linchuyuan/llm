@@ -8,7 +8,7 @@ class DataFrame(object):
     def __init__(self, ticker_list, feature_device, label_device):
         self.data = None
         for ticker in ticker_list:
-            hist = yf.download(ticker, period="1mo", interval="2m").to_numpy()
+            hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
             if self.data is None:
                     self.data = hist[:, :-1]
             else:
@@ -23,7 +23,7 @@ class DataFrame(object):
         self.label_device = label_device
 
     def getBatch(self, batch_size : int, src_block_size: int,
-                 tgt_block_size, split='training'):
+                 tgt_block_size, pred_block_size: int, split='training'):
         n = int(0.9 * len(self.data))
         data = self.data[:n]
         eval = self.data[n:]
@@ -32,20 +32,21 @@ class DataFrame(object):
         else:
             training_data = data
 
-        ix = torch.randint(len(training_data) - src_block_size, (batch_size,))
+        ix = torch.randint(len(training_data) - src_block_size - pred_block_size, (batch_size,))
         x = torch.stack([ training_data[i:i+src_block_size] for i in ix])
         y = torch.stack(
             [ training_data[
-                i+src_block_size-tgt_block_size:i+src_block_size] for i in ix]
+                i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size] for i in ix]
         )
         x, y = x.to(self.feature_device), y.to(self.label_device)
         return x, y
 
-    def getInputWithIx(self, src_block_size: int, tgt_block_size: int, ix: int):
+    def getInputWithIx(self, src_block_size: int,
+        tgt_block_size: int, pred_block_size:int, ix: int):
         i = ix
         x = self.data[i:i+src_block_size].unsqueeze(0)
         y = self.data[
-            i+src_block_size-tgt_block_size:i+src_block_size].unsqueeze(0)
+            i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size].unsqueeze(0)
         x, y = x.to(self.feature_device), y.to(self.label_device)
         return x, y
 

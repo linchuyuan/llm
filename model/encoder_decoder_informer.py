@@ -33,12 +33,14 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.decoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
-                config.n_embed, config.n_target_data_size).to(self.config.cuda1)
+                config.n_embed,
+                config.n_decoder_block_size + config.n_predict_block_size).to(self.config.cuda1)
 
-        self.final_self_attention = FinalMappingAttentionBlock(config.n_embed).to(config.cuda1)
+        # self.self_attention_token_reduce = FinalMappingAttentionBlock(
+        #    config.n_embed, config.n_predict_block_size).to(config.cuda1)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
             config.n_embed, config.n_decoder_head,
-            config.n_predict_block_size) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
+            config.n_decoder_block_size + config.n_predict_block_size) for _ in range(config.n_decoder_layer)]).to(config.cuda1)
 
 
         # final mapping
@@ -56,21 +58,22 @@ class EncoderDecoderInformer(torch.nn.Module):
         memory = self.encoder_blocks(encoder_logits)
 
         # decoder
-        pred = targets[:, -self.config.n_predict_block_size:, :].clone().detach()
-        targets = targets[:, :self.config.n_decoder_block_size, :]
-        decoder_logits = self.decoder_embedding(targets)
+        # pred = targets[:, -self.config.n_predict_block_size:, :].clone().detach()
+        # decoder_in = targets[:, :self.config.n_decoder_block_size, :].clone().detach()
+        decoder_in = targets.clone().detach()
+        decoder_in[:,-self.config.n_predict_block_size,:] = 1
+        decoder_logits = self.decoder_embedding(decoder_in)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
-        decoder_logits = self.final_self_attention(
-            decoder_logits[:, -self.config.n_predict_block_size:, :], decoder_logits)
+        # decoder_logits = self.self_attention_token_reduce(
+        #    decoder_logits[:, -self.config.n_predict_block_size:, :], decoder_logits)
 
         decoder_out, _ = self.decoder_blocks((decoder_logits, memory.to(decoder_logits.device)))
 
         # final mapping
         logits = self.final_linear1(decoder_out)
-        # logits = logits[:, -self.config.n_predict_block_size:, :]
 
-        loss = self.loss(logits, pred)
-        return logits, loss
+        loss = self.loss(logits, targets)
+        return logits[:,-self.config.n_predict_block_size:, :], loss
 
     @torch.no_grad()
     def estimate_loss(self, get_batch, eval_iters=200):
@@ -81,7 +84,9 @@ class EncoderDecoderInformer(torch.nn.Module):
             for k in range(eval_iters):
                 x, y = get_batch(self.config.batch_size,
                     self.config.n_encoder_block_size,
-                    self.config.n_target_data_size, split)
+                    self.config.n_decoder_block_size,
+                    self.config.n_predict_block_size,
+                    split)
                 logits, loss = self.forward(x, y)
                 losses[k] = loss.item()
             out[split] = losses.mean()
@@ -136,7 +141,8 @@ class EncoderDecoderInformer(torch.nn.Module):
 
             x, y = get_batch(self.config.batch_size,
                 self.config.n_encoder_block_size,
-                self.config.n_target_data_size)
+                self.config.n_decoder_block_size,
+                self.config.n_predict_block_size)
             logits, loss = self.forward(x, y)
             print("Loop %s, %s, speed %s b/s" % (
                 i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
