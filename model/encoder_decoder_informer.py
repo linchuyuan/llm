@@ -20,6 +20,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.config = config
 
         # encoder block
+        self.encoder_ln = torch.nn.LayerNorm(self.config.n_features).to(self.config.cuda0)
         self.encoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda0)
         self.encoder_position_embedding_table = SinusoidalPositionalEmbedding(
@@ -30,12 +31,12 @@ class EncoderDecoderInformer(torch.nn.Module):
 
 
         # decoder block
+        self.decoder_ln = torch.nn.LayerNorm(self.config.n_features).to(self.config.cuda1)
         self.decoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
                 config.n_embed,
                 config.n_decoder_block_size + config.n_predict_block_size).to(self.config.cuda1)
-
         # self.self_attention_token_reduce = FinalMappingAttentionBlock(
         #    config.n_embed, config.n_predict_block_size).to(config.cuda1)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
@@ -53,6 +54,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         B, T, C = index.shape
 
         # encoder
+        index = self.encoder_ln(index)
         encoder_logits = self.encoder_embedding(index)
         encoder_logits = self.encoder_position_embedding_table(encoder_logits)
         memory = self.encoder_blocks(encoder_logits)
@@ -61,7 +63,8 @@ class EncoderDecoderInformer(torch.nn.Module):
         # pred = targets[:, -self.config.n_predict_block_size:, :].clone().detach()
         # decoder_in = targets[:, :self.config.n_decoder_block_size, :].clone().detach()
         decoder_in = targets.clone().detach()
-        decoder_in[:,-self.config.n_predict_block_size,:] = 1
+        decoder_in = self.decoder_ln(decoder_in)
+        decoder_in[:,-self.config.n_predict_block_size:,:] = 1
         decoder_logits = self.decoder_embedding(decoder_in)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
         # decoder_logits = self.self_attention_token_reduce(
@@ -71,9 +74,7 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # final mapping
         logits = self.final_linear1(decoder_out)
-
-        loss = self.loss(logits, targets)
-        return logits[:,-self.config.n_predict_block_size:, :], loss
+        return logits[:,-self.config.n_predict_block_size:, :]
 
     @torch.no_grad()
     def estimate_loss(self, get_batch, eval_iters=200):
@@ -87,7 +88,8 @@ class EncoderDecoderInformer(torch.nn.Module):
                     self.config.n_decoder_block_size,
                     self.config.n_predict_block_size,
                     split)
-                logits, loss = self.forward(x, y)
+                logits = self.forward(x, y)
+                loss = self.loss(logits, y[:,-self.config.n_predict_block_size:,:])
                 losses[k] = loss.item()
             out[split] = losses.mean()
         self.train()
@@ -106,7 +108,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         else:
             raise SystemError("No checkpoint available.")
 
-        logits, loss = self.forward(index, target)
+        logits = self.forward(index, target)
         return logits
 
     def train_and_update(self, get_batch, epoch, eval_interval):
@@ -143,7 +145,8 @@ class EncoderDecoderInformer(torch.nn.Module):
                 self.config.n_encoder_block_size,
                 self.config.n_decoder_block_size,
                 self.config.n_predict_block_size)
-            logits, loss = self.forward(x, y)
+            logits = self.forward(x, y)
+            loss = self.loss(logits, y[:,-self.config.n_predict_block_size:,:])
             print("Loop %s, %s, speed %s b/s" % (
                 i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
             optimizer.zero_grad(set_to_none=True)
