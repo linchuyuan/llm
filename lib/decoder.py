@@ -18,16 +18,18 @@ class DecoderBlock(torch.nn.Module):
         self.ln1 = torch.nn.LayerNorm(n_embed, eps=1e-6)
         self.ln2 = torch.nn.LayerNorm(n_embed, eps=1e-6)
         self.ln3 = torch.nn.LayerNorm(n_embed, eps=1e-6)
+        self.ln_memory = torch.nn.LayerNorm(n_embed, eps=1e-6)
 
     # using args so it is compatible with nn.sequential
     def forward(self, args: tuple):
         index, memory = args[0], args[1]
-        index = self.ln1(index)
+        index_norm = self.ln1(index)
         index = index + self.attention_masked(
-                index, index)
-        index = self.ln2(index)
+                index_norm, index_norm)
+        index_norm = self.ln2(index)
+        memory_norm = self.ln_memory(memory)
         index = index + self.attention_unmasked(
-                index, memory)
-        index = self.ln3(index)
-        index = index + self.ffwd(index)
+                index_norm, memory_norm)
+        index_norm = self.ln3(index)
+        index = index + self.ffwd(index_norm)
         return (index, memory)

@@ -17,8 +17,8 @@ class EncoderBlock(torch.nn.Module):
         self.ln2 = torch.nn.LayerNorm(n_embed, eps=1e-6)
 
     def forward(self, index):
-        index = self.ln1(index)
-        index = index + self.sa(index, index)
-        index = self.ln2(index)
-        index = index + self.ffwd(index)
+        index_norm = self.ln1(index)
+        index = index + self.sa(index_norm, index_norm)
+        index_norm = self.ln2(index)
+        index = index + self.ffwd(index_norm)
         return index
