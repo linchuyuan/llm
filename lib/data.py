@@ -42,12 +42,24 @@ class DataFrame(object):
         return x, y
 
     def getInputWithIx(self, src_block_size: int,
-        tgt_block_size: int, pred_block_size:int, ix: int):
+                       tgt_block_size: int, pred_block_size:int, ix: int):
         i = ix
         x = self.data[i:i+src_block_size].unsqueeze(0)
         y = self.data[
             i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size].unsqueeze(0)
         x, y = x.to(self.feature_device), y.to(self.label_device)
+        return x, y
+
+    def getLatest(self, src_block_size: int,
+                  tgt_block_size: int, pred_block_size:int):
+        num_data = len(self.data)
+        src_block_start = num_data - src_block_size
+        tgt_block_start = num_data - tgt_block_size
+        x = self.data[src_block_start:]
+        y = torch.ones((tgt_block_size + pred_block_size, len(self.data[0])))
+        y[:tgt_block_size,:] = self.data[tgt_block_start:]
+        x = x.unsqueeze(0)
+        y = y.unsqueeze(0)
         return x, y
 
     def raw(self):

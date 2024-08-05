@@ -7,31 +7,34 @@ import pdb
 import os
 from lib.data import DataFrame
 from lib.config import Config
-from model.encoder_decoder_informer import EncoderDecoderInformer
+from model.encoder_decoder_informer import \
+        EncoderDecoderInformer, \
+        train_and_update, \
+        generate
 
 run_predict = input("run predict (y/n, default n)?:")
 if not run_predict:
     run_predict = 'n'
-
+predict_feature_ix = 1
 config = Config(
     tickers = [
         "SMCI",
     ],
-    batch_size = 8,
+    batch_size = 6,
     lr = 1e-5,
     epoch = 10001,
-    eval_interval = 1e3,
+    eval_interval = 1e2,
 )
 
 informer_config = Config(
-    n_embed = 2000,
-    n_encoder_block_size =4000,
+    n_embed = 4400,
+    n_encoder_block_size =2000,
     n_encoder_head = 1,
     n_encoder_layer = 1,
-    n_decoder_block_size = 100,
+    n_decoder_block_size = 1000,
     n_decoder_head = 1,
     n_decoder_layer = 1,
-    n_predict_block_size = 100,
+    n_predict_block_size = 500,
     lr = config.lr,
     batch_size = config.batch_size,
 )
@@ -39,14 +42,14 @@ informer_config = Config(
 def predict(model, data, config, ix=0, checkpoint_path=None):
     x, y = data.getInputWithIx(config.n_encoder_block_size,
         config.n_decoder_block_size, config.n_predict_block_size, ix)
-    predict = model.generate(x, y,
+    predict = generate(model, informer_config, x, y,
         checkpoint_path=checkpoint_path)
     return y, predict
 
 data = DataFrame(
     config.tickers,
     config.cuda0,
-    config.cuda1)
+    config.cuda0)
 
 x, y = data.getBatch(
     config.batch_size,
@@ -56,17 +59,28 @@ x, y = data.getBatch(
 _, _, informer_config.n_features = x.shape
 
 model = EncoderDecoderInformer(informer_config)
+model = torch.nn.DataParallel(model)
+model.to(informer_config.cuda0)
 
 if run_predict == 'y':
-    ix = 0
+    ix = 3259
     tgt, pred = predict(model, data, informer_config,
                 ix=ix, checkpoint_path=informer_config.informerCheckpointPath())
-    predict_feature_ix = 1
     predicted_line = tgt.clone().detach()
-    predicted_line[:,-informer_config.n_predict_block_size:,:] = pred
+    predicted_line[:, -informer_config.n_predict_block_size:,:] = pred
     plt.plot(predicted_line[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted")
     plt.plot(tgt[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Actual")
     plt.legend()
     plt.show()
+elif run_predict == 'p':
+    x, y = data.getLatest(informer_config.n_encoder_block_size,
+            informer_config.n_decoder_block_size,
+            informer_config.n_predict_block_size)
+    predict = generate(model, informer_config, x, y, 
+            checkpoint_path=informer_config.informerCheckpointPath())
+    y[:, -informer_config.n_predict_block_size:,:] = predict
+    plt.plot(y[0, :, predict_feature_ix].flatten().numpy())
+    plt.legend()
+    plt.show()
 else:
-    model.train_and_update(data.getBatch, config.epoch, config.eval_interval)
+    train_and_update(model, informer_config, data.getBatch, config.epoch, config.eval_interval)
