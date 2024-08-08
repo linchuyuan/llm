@@ -18,10 +18,8 @@ class DataFrame(object):
                 else:
                     self.data = np.concatenate((self.data, hist[:len(self.data),:]), axis=1)
         self.data = self.data.astype(np.float32)
-        self.data = torch.from_numpy(self.data).to(feature_device)
+        self.data = torch.from_numpy(self.data).to(device)
         print("data shape is ", self.data.shape)
-        self.feature_device = feature_device
-        self.label_device = label_device
         n = int(0.55 * len(self.data))
         self.train_data = self.data[:n]
         self.eval_data = self.data[n:]
