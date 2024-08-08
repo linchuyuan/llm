@@ -45,7 +45,6 @@ class DataFrame(object):
         x = self.data[i:i+src_block_size].unsqueeze(0)
         y = self.data[
             i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size].unsqueeze(0)
-        x, y = x.to(self.feature_device), y.to(self.label_device)
         return x, y
 
     def getLatest(self, src_block_size: int,
