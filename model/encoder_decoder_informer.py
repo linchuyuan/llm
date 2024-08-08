@@ -77,14 +77,14 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # final mapping
         logits = self.final_linear1(decoder_out)
-        return logits[:,-self.config.n_predict_block_size:, :]
+        return logits[:,-self.config.n_predict_block_size:, :5]
         # return logits
 
 @torch.no_grad()
 def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
     out = {}
     model.eval()
-    for split in ['train', 'val']:
+    for split in ['training', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
             x, y = get_batch(config.batch_size,
@@ -93,7 +93,7 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
                 config.n_predict_block_size,
                 split)
             logits = model.forward(x, y)
-            loss = criterion(logits, y[:,-config.n_predict_block_size:,:])
+            loss = criterion(logits, y[:,-config.n_predict_block_size:,:5])
             # loss = criterion(logits, y)
             losses[k] = loss.item()
         out[split] = losses.mean()
@@ -137,9 +137,9 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
         print("Clean run starts %s " % checkpoint_path)
     print("starting")
     for i in range(int(epoch)):
-        if i % eval_interval == 0 and i != 0:
+        if i % eval_interval == 0:
             losses = estimate_loss(model, config, criterion, get_batch)
-            print(f"step {i}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+            print(f"step {i}: train loss {losses['training']:.4f}, val loss {losses['val']:.4f}")
             torch.save({
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
@@ -151,7 +151,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_decoder_block_size,
             config.n_predict_block_size)
         logits = model.forward(x, y)
-        loss = criterion(logits, y[:,-config.n_predict_block_size:,:])
+        loss = criterion(logits, y[:,-config.n_predict_block_size:,:5])
         # loss = criterion(logits, y)
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')

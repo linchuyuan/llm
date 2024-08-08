@@ -27,14 +27,14 @@ config = Config(
 )
 
 informer_config = Config(
-    n_embed = 4400,
-    n_encoder_block_size =2000,
-    n_encoder_head = 1,
-    n_encoder_layer = 1,
-    n_decoder_block_size = 1000,
-    n_decoder_head = 1,
-    n_decoder_layer = 1,
-    n_predict_block_size = 500,
+    n_embed = 1000,
+    n_encoder_block_size =500,
+    n_encoder_head = 10,
+    n_encoder_layer = 10,
+    n_decoder_block_size = 250,
+    n_decoder_head = 10,
+    n_decoder_layer = 10,
+    n_predict_block_size = 100,
     lr = config.lr,
     batch_size = config.batch_size,
 )
@@ -48,7 +48,6 @@ def predict(model, data, config, ix=0, checkpoint_path=None):
 
 data = DataFrame(
     config.tickers,
-    config.cuda0,
     config.cuda0)
 
 x, y = data.getBatch(
@@ -63,10 +62,10 @@ model = torch.nn.DataParallel(model)
 model.to(informer_config.cuda0)
 
 if run_predict == 'y':
-    ix = 3259
+    ix = 500
     tgt, pred = predict(model, data, informer_config,
                 ix=ix, checkpoint_path=informer_config.informerCheckpointPath())
-    predicted_line = tgt.clone().detach()
+    predicted_line = tgt.clone()[:,:,:5].detach()
     predicted_line[:, -informer_config.n_predict_block_size:,:] = pred
     plt.plot(predicted_line[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted")
     plt.plot(tgt[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Actual")

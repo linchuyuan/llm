@@ -5,32 +5,33 @@ import numpy as np
 import pdb
 
 class DataFrame(object):
-    def __init__(self, ticker_list, feature_device, label_device):
+    def __init__(self, ticker_list, device):
         self.data = None
         for ticker in ticker_list:
             hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
+            hist = hist[:, :-1]
             if self.data is None:
-                    self.data = hist[:, :-1]
+                    self.data = hist
             else:
                 if len(self.data) > len(hist):
-                    self.data = np.concatenate((self.data[:len(hist)], hist[:, :-1]), axis=1)
+                    self.data = np.concatenate((self.data[:len(hist)], hist), axis=1)
                 else:
-                    self.data = np.concatenate((self.data, hist[:len(self.data),:-1]), axis=1)
+                    self.data = np.concatenate((self.data, hist[:len(self.data),:]), axis=1)
         self.data = self.data.astype(np.float32)
-        self.data = torch.from_numpy(self.data)
+        self.data = torch.from_numpy(self.data).to(feature_device)
         print("data shape is ", self.data.shape)
         self.feature_device = feature_device
         self.label_device = label_device
+        n = int(0.55 * len(self.data))
+        self.train_data = self.data[:n]
+        self.eval_data = self.data[n:]
 
     def getBatch(self, batch_size : int, src_block_size: int,
                  tgt_block_size, pred_block_size: int, split='training'):
-        n = int(0.9 * len(self.data))
-        data = self.data[:n]
-        eval = self.data[n:]
         if split == "training":
-            training_data = data
+            training_data = self.train_data
         else:
-            training_data = data
+            training_data = self.eval_data
 
         ix = torch.randint(len(training_data) - src_block_size - pred_block_size, (batch_size,))
         x = torch.stack([ training_data[i:i+src_block_size] for i in ix])
@@ -38,7 +39,6 @@ class DataFrame(object):
             [ training_data[
                 i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size] for i in ix]
         )
-        x, y = x.to(self.feature_device), y.to(self.label_device)
         return x, y
 
     def getInputWithIx(self, src_block_size: int,
