@@ -11,6 +11,7 @@ from lib.final_mapping_attention_block import FinalMappingAttentionBlock
 from lib.sinusoidal_position_embedding import SinusoidalPositionalEmbedding
 from lib.token_embedding import TokenEmbedding
 from lib.config import Config
+from lib.data import DataFrame
 
 class EncoderDecoderInformer(torch.nn.Module):
 
@@ -26,7 +27,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.encoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda0)
         self.encoder_position_embedding_table = SinusoidalPositionalEmbedding(
-                config.n_embed, config.n_encoder_block_size).to(self.config.cuda0)
+                config.n_embed, 5000).to(self.config.cuda0)
         self.encoder_blocks = torch.nn.Sequential(*[EncoderBlock(
             config.n_embed, config.n_encoder_head,
             config.n_encoder_block_size)
@@ -40,8 +41,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.decoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
-                config.n_embed,
-                config.n_decoder_block_size + config.n_predict_block_size).to(self.config.cuda1)
+                config.n_embed, 5000).to(self.config.cuda1)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
             config.n_embed, config.n_decoder_head,
             config.n_decoder_block_size + config.n_predict_block_size)
@@ -101,8 +101,9 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
     return out
 
 @torch.no_grad()
-def generate(model, config,  index, target, checkpoint_path=None):
+def generate(model, config,  index, target, checkpoint_path=None, step=1):
     checkpoint = None
+    model.eval()
     print("Generating from path %s" %(checkpoint_path))
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
         if torch.cuda.device_count() == 1:
@@ -112,9 +113,13 @@ def generate(model, config,  index, target, checkpoint_path=None):
         model.load_state_dict(checkpoint['model_state_dict'])
     else:
         raise SystemError("No checkpoint available.")
-
-    logits = model.forward(index, target)
-    return logits
+    for _ in range(step):
+        buf = DataFrame.padOnes(config.n_predict_block_size, target)
+        # tgt_size = config.n_decoder_block_size + config.n_predict_block_size
+        # pred = model.forward(index, buf[:, -tgt_size:, :])
+        pred = model.forward(index, buf)
+        target = torch.concatenate((target, pred), dim=1)
+    return target
 
 def train_and_update(model, config, get_batch, epoch, eval_interval):
     start_time = time.time()
@@ -137,7 +142,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
         print("Clean run starts %s " % checkpoint_path)
     print("starting")
     for i in range(int(epoch)):
-        if i % eval_interval == 0:
+        if i % eval_interval == 0 and i != 0:
             losses = estimate_loss(model, config, criterion, get_batch)
             print(f"step {i}: train loss {losses['training']:.4f}, val loss {losses['val']:.4f}")
             torch.save({

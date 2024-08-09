@@ -20,18 +20,21 @@ class DataFrame(object):
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
         print("data shape is ", self.data.shape)
-        n = int(0.55 * len(self.data))
-        self.train_data = self.data[:n]
-        self.eval_data = self.data[n:]
+        # n = int(1 * len(self.data))
+        # self.train_data = self.data[:n]
+        # self.eval_data = self.data[n:]
 
     def getBatch(self, batch_size : int, src_block_size: int,
                  tgt_block_size, pred_block_size: int, split='training'):
+        """ 
         if split == "training":
             training_data = self.train_data
         else:
             training_data = self.eval_data
-
-        ix = torch.randint(len(training_data) - src_block_size - pred_block_size, (batch_size,))
+        """
+        training_data = self.data
+        ix_range = len(training_data) - src_block_size - pred_block_size
+        ix = torch.randint(ix_range, (batch_size,))
         x = torch.stack([ training_data[i:i+src_block_size] for i in ix])
         y = torch.stack(
             [ training_data[
@@ -44,7 +47,7 @@ class DataFrame(object):
         i = ix
         x = self.data[i:i+src_block_size].unsqueeze(0)
         y = self.data[
-            i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size].unsqueeze(0)
+            i+src_block_size-tgt_block_size:i+src_block_size].unsqueeze(0)
         return x, y
 
     def getLatest(self, src_block_size: int,
@@ -53,11 +56,16 @@ class DataFrame(object):
         src_block_start = num_data - src_block_size
         tgt_block_start = num_data - tgt_block_size
         x = self.data[src_block_start:]
-        y = torch.ones((tgt_block_size + pred_block_size, len(self.data[0])))
-        y[:tgt_block_size,:] = self.data[tgt_block_start:]
+        y = self.data[tgt_block_start:]
+        y = self.pad(pred_block_size, y)
         x = x.unsqueeze(0)
         y = y.unsqueeze(0)
         return x, y
+
+    @staticmethod
+    def padOnes(token_size, index):
+        ones = torch.ones((1, token_size, len(index[0,0]))).to(index.device)
+        return torch.concatenate((index, ones), dim=1)      
 
     def raw(self):
         return self.data
