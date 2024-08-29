@@ -2,23 +2,24 @@
 import yfinance as yf
 import torch
 import numpy as np
+import pandas
 import pdb
 
 class DataFrame(object):
     def __init__(self, ticker_list, device):
         self.data = None
         for ticker in ticker_list:
-            hist = yf.download(ticker, period="60d", interval="2m").to_numpy()
-            hist = hist[:, :-1]
+            hist = yf.download(ticker, period="60d", interval="2m")
+            hist = hist.add_prefix(ticker)
             if self.data is None:
-                    self.data = hist
+                self.data = hist
             else:
-                if len(self.data) > len(hist):
-                    self.data = np.concatenate((self.data[:len(hist)], hist), axis=1)
-                else:
-                    self.data = np.concatenate((self.data, hist[:len(self.data),:]), axis=1)
+                self.data = pandas.merge(self.data, hist, on='Datetime')
+        self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
+        n = int(0.96 * len(self.data))
+        self.data = self.data[:n]
         print("data shape is ", self.data.shape)
         # n = int(1 * len(self.data))
         # self.train_data = self.data[:n]
@@ -51,15 +52,12 @@ class DataFrame(object):
         return x, y
 
     def getLatest(self, src_block_size: int,
-                  tgt_block_size: int, pred_block_size:int):
+                  tgt_block_size: int):
         num_data = len(self.data)
         src_block_start = num_data - src_block_size
         tgt_block_start = num_data - tgt_block_size
-        x = self.data[src_block_start:]
-        y = self.data[tgt_block_start:]
-        y = self.pad(pred_block_size, y)
-        x = x.unsqueeze(0)
-        y = y.unsqueeze(0)
+        x = self.data[src_block_start:].unsqueeze(0)
+        y = self.data[tgt_block_start:].unsqueeze(0)
         return x, y
 
     @staticmethod

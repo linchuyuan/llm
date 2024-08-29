@@ -13,6 +13,7 @@ from lib.token_embedding import TokenEmbedding
 from lib.config import Config
 from lib.data import DataFrame
 
+_predict_feature_size = 5
 class EncoderDecoderInformer(torch.nn.Module):
 
     def __init__(self, config : Config):
@@ -23,7 +24,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         # self.encoder_linear = torch.nn.Linear(self.config.n_features,
         #         self.config.n_features).to(self.config.cuda0)
         self.encoder_ln = torch.nn.LayerNorm(
-                self.config.n_features).to(self.config.cuda0)
+                self.config.n_encoder_block_size).to(self.config.cuda0)
         self.encoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda0)
         self.encoder_position_embedding_table = SinusoidalPositionalEmbedding(
@@ -37,15 +38,17 @@ class EncoderDecoderInformer(torch.nn.Module):
         # decoder block
         # self.decoder_linear = torch.nn.Linear(self.config.n_features,
         #         self.config.n_features).to(self.config.cuda1)
-        self.decoder_ln = torch.nn.LayerNorm(self.config.n_features).to(self.config.cuda1)
+        self.decoder_ln = torch.nn.LayerNorm(
+                self.config.n_decoder_block_size+self.config.n_predict_block_size).to(
+                        self.config.cuda1)
         self.decoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
                 config.n_embed, 5000).to(self.config.cuda1)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
-            config.n_embed, config.n_decoder_head,
-            config.n_decoder_block_size + config.n_predict_block_size)
-            for _ in range(config.n_decoder_layer)]).to(self.config.cuda1)
+                config.n_embed, config.n_decoder_head,
+                config.n_decoder_block_size + config.n_predict_block_size)
+                for _ in range(config.n_decoder_layer)]).to(self.config.cuda1)
 
 
         # final mapping
@@ -58,7 +61,9 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # encoder
         # index = self.encoder_linear(index)
+        index = torch.permute(index, (0,2,1))
         index = self.encoder_ln(index)
+        index = torch.permute(index, (0,2,1))
         encoder_logits = self.encoder_embedding(index)
         encoder_logits = self.encoder_position_embedding_table(encoder_logits)
         memory = self.encoder_blocks(encoder_logits)
@@ -69,7 +74,9 @@ class EncoderDecoderInformer(torch.nn.Module):
         decoder_in = targets.clone().detach()
         decoder_in[:,-self.config.n_predict_block_size:,:] = 1
         # decoder_in = self.decoder_linear(decoder_in)
+        decoder_in = torch.permute(decoder_in, (0,2,1))
         decoder_in = self.decoder_ln(decoder_in)
+        decoder_in = torch.permute(decoder_in, (0,2,1))
         decoder_logits = self.decoder_embedding(decoder_in)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
 
@@ -77,7 +84,7 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # final mapping
         logits = self.final_linear1(decoder_out)
-        return logits[:,-self.config.n_predict_block_size:, :5]
+        return logits[:,-self.config.n_predict_block_size:, :]
         # return logits
 
 @torch.no_grad()
@@ -93,7 +100,8 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
                 config.n_predict_block_size,
                 split)
             logits = model.forward(x, y)
-            loss = criterion(logits, y[:,-config.n_predict_block_size:,:5])
+            loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
+                    y[:,-config.n_predict_block_size:,:_predict_feature_size])
             # loss = criterion(logits, y)
             losses[k] = loss.item()
         out[split] = losses.mean()
@@ -103,7 +111,7 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
 @torch.no_grad()
 def generate(model, config,  index, target, checkpoint_path=None, step=1):
     checkpoint = None
-    model.eval()
+    # model.eval()
     print("Generating from path %s" %(checkpoint_path))
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
         if torch.cuda.device_count() == 1:
@@ -156,7 +164,8 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_decoder_block_size,
             config.n_predict_block_size)
         logits = model.forward(x, y)
-        loss = criterion(logits, y[:,-config.n_predict_block_size:,:5])
+        loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
+                y[:,-config.n_predict_block_size:,:_predict_feature_size])
         # loss = criterion(logits, y)
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
