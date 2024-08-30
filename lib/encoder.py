@@ -3,6 +3,7 @@ import torch
 
 from lib.multi_head import MultiHeadAttention
 from lib.feed_forward import FeedForward
+from lib.layer_norm import LayerNorm
 
 class EncoderBlock(torch.nn.Module):
     """ Transformer block: communication followed by computation """
@@ -13,8 +14,8 @@ class EncoderBlock(torch.nn.Module):
         self.sa = MultiHeadAttention(
                 n_head, n_embed, head_size, block_size, masked=False)
         self.ffwd = FeedForward(n_embed)
-        self.ln1 = torch.nn.LayerNorm(n_embed, eps=1e-6)
-        self.ln2 = torch.nn.LayerNorm(n_embed, eps=1e-6)
+        self.ln1 = LayerNorm(block_size, eps=1e-6)
+        self.ln2 = LayerNorm(block_size, eps=1e-6)
 
     def forward(self, index):
         index_norm = self.ln1(index)

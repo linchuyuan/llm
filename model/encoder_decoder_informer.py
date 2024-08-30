@@ -12,6 +12,7 @@ from lib.sinusoidal_position_embedding import SinusoidalPositionalEmbedding
 from lib.token_embedding import TokenEmbedding
 from lib.config import Config
 from lib.data import DataFrame
+from lib.layer_norm import LayerNorm
 
 _predict_feature_size = 5
 class EncoderDecoderInformer(torch.nn.Module):
@@ -21,9 +22,9 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.config = config
 
         # encoder block
-        # self.encoder_linear = torch.nn.Linear(self.config.n_features,
-        #         self.config.n_features).to(self.config.cuda0)
-        self.encoder_ln = torch.nn.LayerNorm(
+        self.encoder_linear = torch.nn.Linear(self.config.n_features,
+                self.config.n_features).to(self.config.cuda0)
+        self.encoder_ln = LayerNorm(
                 self.config.n_encoder_block_size).to(self.config.cuda0)
         self.encoder_embedding = TokenEmbedding(
                 config.n_features, config.n_embed).to(self.config.cuda0)
@@ -36,9 +37,9 @@ class EncoderDecoderInformer(torch.nn.Module):
 
 
         # decoder block
-        # self.decoder_linear = torch.nn.Linear(self.config.n_features,
-        #         self.config.n_features).to(self.config.cuda1)
-        self.decoder_ln = torch.nn.LayerNorm(
+        self.decoder_linear = torch.nn.Linear(self.config.n_features,
+                self.config.n_features).to(self.config.cuda1)
+        self.decoder_ln = LayerNorm(
                 self.config.n_decoder_block_size+self.config.n_predict_block_size).to(
                         self.config.cuda1)
         self.decoder_embedding = TokenEmbedding(
@@ -60,10 +61,8 @@ class EncoderDecoderInformer(torch.nn.Module):
         B, T, C = index.shape
 
         # encoder
-        # index = self.encoder_linear(index)
-        index = torch.permute(index, (0,2,1))
+        index = self.encoder_linear(index)
         index = self.encoder_ln(index)
-        index = torch.permute(index, (0,2,1))
         encoder_logits = self.encoder_embedding(index)
         encoder_logits = self.encoder_position_embedding_table(encoder_logits)
         memory = self.encoder_blocks(encoder_logits)
@@ -73,10 +72,8 @@ class EncoderDecoderInformer(torch.nn.Module):
         # decoder_in = targets[:, :self.config.n_decoder_block_size, :].clone().detach()
         decoder_in = targets.clone().detach()
         decoder_in[:,-self.config.n_predict_block_size:,:] = 1
-        # decoder_in = self.decoder_linear(decoder_in)
-        decoder_in = torch.permute(decoder_in, (0,2,1))
+        decoder_in = self.decoder_linear(decoder_in)
         decoder_in = self.decoder_ln(decoder_in)
-        decoder_in = torch.permute(decoder_in, (0,2,1))
         decoder_logits = self.decoder_embedding(decoder_in)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
 

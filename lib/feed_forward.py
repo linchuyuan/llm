@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import torch
+from lib.config import dropout
 
 class FeedForward(torch.nn.Module):
     def __init__(self, n_embed):
@@ -8,9 +9,9 @@ class FeedForward(torch.nn.Module):
         self.net = torch.nn.Sequential(
             torch.nn.Linear(n_embed, hiddenshape),
             torch.nn.ReLU(),
-            torch.nn.Dropout(0.1),
+            torch.nn.Dropout(dropout),
             torch.nn.Linear(hiddenshape, n_embed),
-            torch.nn.Dropout(0.1),
+            torch.nn.Dropout(dropout),
         )
 
     def forward(self, x):

@@ -18,7 +18,7 @@ class DataFrame(object):
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
-        n = int(0.96 * len(self.data))
+        n = int(1 * len(self.data))
         self.data = self.data[:n]
         print("data shape is ", self.data.shape)
         # n = int(1 * len(self.data))

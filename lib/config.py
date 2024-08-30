@@ -3,6 +3,8 @@
 import torch
 FORCE_CPU = False
 
+dropout = 0.1
+
 class Config(object):
 
     def __init__(self, *args, **kargs):
