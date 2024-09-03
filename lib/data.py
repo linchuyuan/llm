@@ -5,16 +5,23 @@ import numpy as np
 import pandas
 import pdb
 
+DB_FILE = "db.pickle"
 class DataFrame(object):
     def __init__(self, ticker_list, device):
-        self.data = None
+        self.data = self.load()
         for ticker in ticker_list:
             hist = yf.download(ticker, period="60d", interval="2m")
             hist = hist.add_prefix(ticker)
             if self.data is None:
                 self.data = hist
             else:
-                self.data = pandas.merge(self.data, hist, on='Datetime')
+                self.data = pandas.merge(
+                    self.data, hist, on='Datetime', how='outer',
+                    suffixes=[None, '_drop'])
+                self.data = self.data.loc[
+                    :, ~self.data.columns.str.endswith('_drop')]
+                self.data.fillna(0)
+        self.dataFlush()
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
@@ -24,6 +31,23 @@ class DataFrame(object):
         # n = int(1 * len(self.data))
         # self.train_data = self.data[:n]
         # self.eval_data = self.data[n:]
+
+    @property
+    def db(self):
+        if not hasattr(self, '_db'):
+            self._db = pandas.read_pickle(DB_FILE)
+        return self._db
+
+    def load(self):
+        try:
+            return self.db
+        except Exception as ex:
+            print("Unable to load history from db: ", ex)
+            return None
+
+    def dataFlush(self):
+        if self.data is not None:
+            self.data.to_pickle(DB_FILE)
 
     def getBatch(self, batch_size : int, src_block_size: int,
                  tgt_block_size, pred_block_size: int, split='training'):
