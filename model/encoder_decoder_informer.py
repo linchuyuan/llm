@@ -57,7 +57,6 @@ class EncoderDecoderInformer(torch.nn.Module):
 
     def forward(self, index, targets):
         # B, T
-        # print("tokens is %s, \ntargets is %s" % (index, targets))
         B, T, C = index.shape
 
         # encoder
@@ -91,7 +90,7 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
     for split in ['training', 'val']:
         losses = torch.zeros(eval_iters)
         for k in range(eval_iters):
-            x, y = get_batch(config.batch_size,
+            x, x_mark, y, y_mark= get_batch(config.batch_size,
                 config.n_encoder_block_size,
                 config.n_decoder_block_size,
                 config.n_predict_block_size,
@@ -155,8 +154,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
                 'optimizer_state_dict': optimizer.state_dict(),
             }, checkpoint_path)
             scheduler.step(losses['val'])  # Step the scheduler with the validation loss
-
-        x, y = get_batch(config.batch_size,
+        x, x_mark, y, y_mark = get_batch(config.batch_size,
             config.n_encoder_block_size,
             config.n_decoder_block_size,
             config.n_predict_block_size)

@@ -11,7 +11,7 @@ DB_FILE = "db.pickle"
 class DataFrame(object):
     def __init__(self, ticker_list, device):
         self.data = None
-        if self.tradingAvailable():
+        if self.tradingAvailable() or True:
             for ticker in ticker_list:
                 hist = yf.download(ticker, period="60d", interval="2m")
                 hist = hist.add_prefix(ticker)
@@ -30,12 +30,14 @@ class DataFrame(object):
                 self.data = self.data[~self.data.index.duplicated(keep='last')]
                 self.data = self.data.fillna(0)
                 self.dataFlush()
+        self.addTemporalData()
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
         n = int(1 * len(self.data))
         self.data = self.data[:n]
         print("data shape is ", self.data.shape)
+        print(self.data)
         # n = int(1 * len(self.data))
         # self.train_data = self.data[:n]
         # self.eval_data = self.data[n:]
@@ -45,6 +47,14 @@ class DataFrame(object):
         if not hasattr(self, '_db'):
             self._db = pandas.read_pickle(DB_FILE)
         return self._db
+
+    def addTemporalData(self):
+        self.data["year"] = self.data.index.year
+        self.data["month"] = self.data.index.month
+        self.data["weekday"] = self.data.index.weekday
+        self.data["day"] = self.data.index.day
+        self.data["hour"] = self.data.index.hour
+        self.data["minute"] = self.data.index.minute
 
     def load(self):
         try:
@@ -82,7 +92,7 @@ class DataFrame(object):
             [ training_data[
                 i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size] for i in ix]
         )
-        return x, y
+        return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
 
     def getInputWithIx(self, src_block_size: int,
                        tgt_block_size: int, pred_block_size:int, ix: int):
@@ -90,7 +100,7 @@ class DataFrame(object):
         x = self.data[i:i+src_block_size].unsqueeze(0)
         y = self.data[
             i+src_block_size-tgt_block_size:i+src_block_size].unsqueeze(0)
-        return x, y
+        return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
 
     def getLatest(self, src_block_size: int,
                   tgt_block_size: int):
@@ -99,7 +109,7 @@ class DataFrame(object):
         tgt_block_start = num_data - tgt_block_size
         x = self.data[src_block_start:].unsqueeze(0)
         y = self.data[tgt_block_start:].unsqueeze(0)
-        return x, y
+        return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
 
     @staticmethod
     def padOnes(token_size, index):
@@ -107,4 +117,4 @@ class DataFrame(object):
         return torch.concatenate((index, ones), dim=1)      
 
     def raw(self):
-        return self.data
+        return self.data[:,:,:-6], self.data[:,:,-6:]

@@ -25,6 +25,8 @@ config = Config(
         "NVDU",
         "SOXL",
         "UVIX",
+        "QQQ",
+        "TQQQ",
     ],
     batch_size = 7,
     lr = 1e-5,
@@ -56,7 +58,7 @@ data = DataFrame(
     config.tickers,
     config.cuda0)
 
-x, y = data.getBatch(
+x, x_mark, y, y_mark = data.getBatch(
     config.batch_size,
     src_block_size=informer_config.n_encoder_block_size,
     tgt_block_size=informer_config.n_decoder_block_size,
@@ -79,13 +81,14 @@ if run_predict == 'y':
         plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
 
     actual_start = ix + informer_config.n_encoder_block_size - informer_config.n_decoder_block_size
+    raw, raw_mark = data.raw()
     plt.plot(
-        data.raw()[actual_start:actual_start + len(pred[0]), predict_feature_ix].flatten().cpu().numpy(),
+        raw[actual_start:actual_start + len(pred[0]), predict_feature_ix].flatten().cpu().numpy(),
         label="Actual")
     plt.legend()
     plt.show()
 elif run_predict == 'p':
-    x, y = data.getLatest(informer_config.n_encoder_block_size,
+    x, x_mark, y, y_mark = data.getLatest(informer_config.n_encoder_block_size,
             informer_config.n_decoder_block_size)
     # x = data.raw()[:5000].unsqueeze(0)
     predict = generate(model, informer_config, x, y, 
