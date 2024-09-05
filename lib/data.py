@@ -11,7 +11,7 @@ DB_FILE = "db.pickle"
 class DataFrame(object):
     def __init__(self, ticker_list, device):
         self.data = None
-        if self.tradingAvailable() or self.data is None:
+        if self.tradingAvailable():
             for ticker in ticker_list:
                 hist = yf.download(ticker, period="60d", interval="2m")
                 hist = hist.add_prefix(ticker)
@@ -21,13 +21,15 @@ class DataFrame(object):
                     self.data = pandas.merge(
                         self.data, hist, on='Datetime', how='outer')
             self.data = self.data.fillna(0)
+        if self.data is None:
+            self.data = self.load()
+        else:
             db = self.load()
             if db is not None:
-                pdb.set_trace()
                 self.data = pandas.concat([db, self.data])
                 self.data = self.data[~self.data.index.duplicated(keep='last')]
                 self.data = self.data.fillna(0)
-            self.dataFlush()
+                self.dataFlush()
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
