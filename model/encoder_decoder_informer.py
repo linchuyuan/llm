@@ -127,8 +127,8 @@ def generate(model, config,  index, index_mark, target, target_mark,
         raise SystemError("No checkpoint available.")
     for _ in range(step):
         buf = DataFrame.padOnes(config.n_predict_block_size, target)
-        # tgt_size = config.n_decoder_block_size + config.n_predict_block_size
-        # pred = model.forward(index, buf[:, -tgt_size:, :])
+        buf_mark = DataFrame.genTimestamp(
+            target_mark[-1,-1], config.n_predict_block_size)
         pred = model.forward(index, index_mark, buf, buf_mark)
         target = torch.concatenate((target, pred), dim=1)
     return target
@@ -166,6 +166,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_encoder_block_size,
             config.n_decoder_block_size,
             config.n_predict_block_size)
+        buf = DataFrame.genTimestamp(y_mark[-1,-1], config.n_predict_block_size)
         logits = model.forward(x, x_mark, y, y_mark)
         loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
                 y[:,-config.n_predict_block_size:,:_predict_feature_size])

@@ -30,7 +30,8 @@ class DataFrame(object):
                 self.data = self.data[~self.data.index.duplicated(keep='last')]
                 self.data = self.data.fillna(0)
                 self.dataFlush()
-        self.addTemporalData()
+        self.addTemporalData(self.data)
+        self.datetime = self.data.index
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
@@ -47,14 +48,6 @@ class DataFrame(object):
         if not hasattr(self, '_db'):
             self._db = pandas.read_pickle(DB_FILE)
         return self._db
-
-    def addTemporalData(self):
-        self.data["year"] = self.data.index.year
-        self.data["month"] = self.data.index.month
-        self.data["weekday"] = self.data.index.weekday
-        self.data["day"] = self.data.index.day
-        self.data["hour"] = self.data.index.hour
-        self.data["minute"] = self.data.index.minute
 
     def load(self):
         try:
@@ -111,10 +104,35 @@ class DataFrame(object):
         y = self.data[tgt_block_start:].unsqueeze(0)
         return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
 
+    def raw(self):
+        return self.data[:,:,:-6], self.data[:,:,-6:]
+
+    @staticmethod
+    def genTimestamp(start, periods):
+        start_datetime = pandas.DataFrame({
+            'year': start[0].item(),
+            'month': start[1].item(),
+            'day': start[3].item(),
+            'hour': start[4].item(),
+            'minute': start[5].item(),
+        }, index=[0])
+        start_datetime = pandas.to_datetime(start_datetime).iloc[0]
+        sequence = pandas.date_range(
+            start=start_datetime, periods=periods, freq='2min')
+        buf = pandas.DataFrame(index=sequence)
+        DataFrame.addTemporalData(buf)
+        return torch.from_numpy(buf.to_numpy()).unsqueeze(0)
+
+    @staticmethod
+    def addTemporalData(data):
+        data["year"] = data.index.year
+        data["month"] = data.index.month
+        data["weekday"] = data.index.weekday
+        data["day"] = data.index.day
+        data["hour"] = data.index.hour
+        data["minute"] = data.index.minute
+
     @staticmethod
     def padOnes(token_size, index):
         ones = torch.ones((1, token_size, len(index[0,0]))).to(index.device)
         return torch.concatenate((index, ones), dim=1)      
-
-    def raw(self):
-        return self.data[:,:,:-6], self.data[:,:,-6:]
