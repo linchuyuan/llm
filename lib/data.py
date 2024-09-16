@@ -14,6 +14,8 @@ class DataFrame(object):
         if self.tradingAvailable() or True:
             for ticker in ticker_list:
                 hist = yf.download(ticker, period="60d", interval="2m")
+                if hist is None or hist.empty:
+                    continue
                 hist = hist.add_prefix(ticker)
                 if self.data is None:
                     self.data = hist
@@ -35,13 +37,11 @@ class DataFrame(object):
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
-        n = int(1 * len(self.data))
-        self.data = self.data[:n]
+        n = 5200
         print("data shape is ", self.data.shape)
-        print(self.data)
         # n = int(1 * len(self.data))
-        # self.train_data = self.data[:n]
-        # self.eval_data = self.data[n:]
+        self.train_data = self.data[:n]
+        self.eval_data = self.data[n:]
 
     @property
     def db(self):
@@ -71,13 +71,10 @@ class DataFrame(object):
 
     def getBatch(self, batch_size : int, src_block_size: int,
                  tgt_block_size, pred_block_size: int, split='training'):
-        """ 
         if split == "training":
             training_data = self.train_data
         else:
             training_data = self.eval_data
-        """
-        training_data = self.data
         ix_range = len(training_data) - src_block_size - pred_block_size
         ix = torch.randint(ix_range, (batch_size,))
         x = torch.stack([ training_data[i:i+src_block_size] for i in ix])
@@ -105,7 +102,7 @@ class DataFrame(object):
         return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
 
     def raw(self):
-        return self.data[:,:,:-6], self.data[:,:,-6:]
+        return self.data[:,:-6], self.data[:,-6:]
 
     @staticmethod
     def genTimestamp(start, periods):
@@ -117,9 +114,18 @@ class DataFrame(object):
             'minute': start[5].item(),
         }, index=[0])
         start_datetime = pandas.to_datetime(start_datetime).iloc[0]
-        sequence = pandas.date_range(
-            start=start_datetime, periods=periods, freq='2min')
-        buf = pandas.DataFrame(index=sequence)
+        valid_timestamps = []
+        current_datetime = start_datetime
+        while len(valid_timestamps) <= periods + 1:
+            sequence = pandas.date_range(
+                start=current_datetime, periods=1000, freq='2min')  # Generate a large chunk
+            trading_hours_sequence = sequence[
+                (sequence.time >= pandas.Timestamp("09:30").time()) &
+                (sequence.time < pandas.Timestamp("16:00").time())]
+            valid_timestamps.extend(trading_hours_sequence[1:])
+            current_datetime = valid_timestamps[-1]
+        valid_timestamps = valid_timestamps[:periods]
+        buf = pandas.DataFrame(index=valid_timestamps)
         DataFrame.addTemporalData(buf)
         return torch.from_numpy(buf.to_numpy()).unsqueeze(0)
 

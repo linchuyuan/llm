@@ -15,7 +15,7 @@ from model.encoder_decoder_informer import \
 run_predict = input("run predict (y/n, default n)?:")
 if not run_predict:
     run_predict = 'n'
-predict_feature_ix = 1
+predict_feature_ix = 0
 config = Config(
     tickers = [
         "SMCI",
@@ -27,20 +27,23 @@ config = Config(
         "UVIX",
         "QQQ",
         "TQQQ",
+        "QYLD",
+        "XYLD",
+        "RYLD",
     ],
-    batch_size = 7,
+    batch_size = 5,
     lr = 1e-5,
     epoch = 10001,
-    eval_interval = 1e2,
+    eval_interval = 5e2,
 )
 
 informer_config = Config(
-    n_embed = 5800,
-    n_encoder_block_size = 1000,
-    n_encoder_head = 1,
-    n_encoder_layer = 1,
-    n_decoder_block_size = 200,
-    n_decoder_head = 20,
+    n_embed = 3000,
+    n_encoder_block_size = 1400,
+    n_encoder_head = 10,
+    n_encoder_layer = 2,
+    n_decoder_block_size = 600,
+    n_decoder_head = 10,
     n_decoder_layer = 1,
     n_predict_block_size = 200,
     lr = config.lr,
@@ -48,9 +51,9 @@ informer_config = Config(
 )
 
 def predict(model, data, config, ix=0, step=1, checkpoint_path=None):
-    x, y = data.getInputWithIx(config.n_encoder_block_size,
+    x, x_mark, y, y_mark = data.getInputWithIx(config.n_encoder_block_size,
         config.n_decoder_block_size, config.n_predict_block_size, ix)
-    predict = generate(model, informer_config, x, y,
+    predict = generate(model, informer_config, x, x_mark, y, y_mark, 
         checkpoint_path=checkpoint_path, step=step)
     return predict
 
@@ -66,33 +69,31 @@ x, x_mark, y, y_mark = data.getBatch(
 _, _, informer_config.n_features = x.shape
 
 model = EncoderDecoderInformer(informer_config)
-model = torch.nn.DataParallel(model)
-model.to(informer_config.cuda0)
+# model = torch.nn.DataParallel(model)
+# model.to(informer_config.cuda0)
 
 if run_predict == 'y':
-    ix = 1700
-    # ix = 3000
-    for i in range(1):
-        step = 1
-        ix = ix + 100
-        pred = predict(model, data, informer_config,
-            ix=ix, step=step,
-            checkpoint_path=informer_config.informerCheckpointPath())
-        plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
-
-    actual_start = ix + informer_config.n_encoder_block_size - informer_config.n_decoder_block_size
+    ix = 2700
+    criterion = torch.nn.MSELoss()
     raw, raw_mark = data.raw()
-    plt.plot(
-        raw[actual_start:actual_start + len(pred[0]), predict_feature_ix].flatten().cpu().numpy(),
-        label="Actual")
+    pred = predict(model, data, informer_config,
+        ix=ix, checkpoint_path=informer_config.informerCheckpointPath())
+    plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
+    actual_start = ix + informer_config.n_encoder_block_size - informer_config.n_decoder_block_size
+    actual = raw[actual_start:actual_start + len(pred[0]), predict_feature_ix]
+    plt.plot(actual.flatten().cpu().numpy(), label="Actual")
     plt.legend()
+
+    pred = pred[:,:,predict_feature_ix]
+    loss = criterion(pred.flatten().to(config.cuda0), actual.flatten().to(config.cuda0))
+    print("Predict loss is ", loss.item())
     plt.show()
 elif run_predict == 'p':
     x, x_mark, y, y_mark = data.getLatest(informer_config.n_encoder_block_size,
-            informer_config.n_decoder_block_size)
+        informer_config.n_decoder_block_size)
     # x = data.raw()[:5000].unsqueeze(0)
-    predict = generate(model, informer_config, x, y, 
-            checkpoint_path=informer_config.informerCheckpointPath())
+    predict = generate(model, informer_config, x, x_mark, y, y_mark, 
+        checkpoint_path=informer_config.informerCheckpointPath())
     predict = predict.cpu()
     plt.plot(predict[0, :, predict_feature_ix].flatten().numpy())
     plt.legend()

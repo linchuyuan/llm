@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import torch
 import os
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt_predict_feature_size_predict_feature_size
 import pdb
 import time
 
@@ -10,7 +10,7 @@ from lib.decoder import DecoderBlock
 from lib.final_mapping_attention_block import FinalMappingAttentionBlock
 from lib.sinusoidal_position_embedding import SinusoidalPositionalEmbedding
 from lib.token_embedding import TokenEmbedding
-from lib.config import Config
+from lib.config import Config, dropout
 from lib.data import DataFrame
 from lib.layer_norm import LayerNorm
 from lib.temporal_embedding import TemporalEmbedding
@@ -23,16 +23,17 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.config = config
 
         # encoder block
+        self.dropout = torch.nn.Dropout(dropout)
         self.encoder_linear = torch.nn.Linear(self.config.n_features,
-                self.config.n_features).to(self.config.cuda0)
+            self.config.n_features).to(self.config.cuda0)
         self.encoder_ln = LayerNorm(
-                self.config.n_encoder_block_size).to(self.config.cuda0)
+            self.config.n_encoder_block_size).to(self.config.cuda0)
         self.encoder_embedding = TokenEmbedding(
-                config.n_features, config.n_embed).to(self.config.cuda0)
+            config.n_features, config.n_embed).to(self.config.cuda0)
         self.encoder_position_embedding_table = SinusoidalPositionalEmbedding(
-                config.n_embed, 5000).to(self.config.cuda0)
+            config.n_embed, 5000).to(self.config.cuda0)
         self.encoder_temporal_embedding = TemporalEmbedding(
-                config.n_embed).to(self.config.cuda0)
+            config.n_embed).to(self.config.cuda0)
         self.encoder_blocks = torch.nn.Sequential(*[EncoderBlock(
             config.n_embed, config.n_encoder_head,
             config.n_encoder_block_size)
@@ -41,28 +42,39 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # decoder block
         self.decoder_linear = torch.nn.Linear(self.config.n_features,
-                self.config.n_features).to(self.config.cuda1)
+            self.config.n_features).to(self.config.cuda1)
         self.decoder_ln = LayerNorm(
-                self.config.n_decoder_block_size+self.config.n_predict_block_size).to(
-                        self.config.cuda1)
+            self.config.n_decoder_block_size+self.config.n_predict_block_size).to(
+                self.config.cuda1)
         self.decoder_embedding = TokenEmbedding(
-                config.n_features, config.n_embed).to(self.config.cuda1)
+            config.n_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
-                config.n_embed, 5000).to(self.config.cuda1)
+            config.n_embed, 5000).to(self.config.cuda1)
         self.decoder_temporal_embedding = TemporalEmbedding(
-                config.n_embed).to(self.config.cuda1)
+            config.n_embed).to(self.config.cuda1)
         self.decoder_blocks = torch.nn.Sequential(*[DecoderBlock(
-                config.n_embed, config.n_decoder_head,
-                config.n_decoder_block_size + config.n_predict_block_size)
-                for _ in range(config.n_decoder_layer)]).to(self.config.cuda1)
+            config.n_embed, config.n_decoder_head,
+            config.n_decoder_block_size + config.n_predict_block_size)
+            for _ in range(config.n_decoder_layer)]).to(self.config.cuda1)
 
 
         # final mapping
-        self.final_linear1 = torch.nn.Linear(config.n_embed, config.n_features).to(self.config.cuda1)
+        self.final_linear1 = torch.nn.Linear(
+            config.n_embed, config.n_features).to(self.config.cuda1)
+        self.final_block1 = torch.nn.Sequential(*[
+            EncoderBlock(config.n_features, config.n_decoder_head,
+                config.n_decoder_block_size + config.n_predict_block_size,
+                masked=True) for _ in range(16)]).to(self.config.cuda1)
+        self.final_linear2 = torch.nn.Linear(
+            config.n_features, config.n_features).to(self.config.cuda1)
 
     def forward(self, index, index_mark, targets, targets_mark):
         # B, T
         B, T, C = index.shape
+
+        # dropout
+        index = self.dropout(index)
+        targets = self.dropout(targets)
 
         # encoder
         index = self.encoder_linear(index)
@@ -76,22 +88,27 @@ class EncoderDecoderInformer(torch.nn.Module):
         # pred = targets[:, -self.config.n_predict_block_size:, :].clone().detach()
         # decoder_in = targets[:, :self.config.n_decoder_block_size, :].clone().detach()
         decoder_in = targets.clone().detach()
-        decoder_in[:,-self.config.n_predict_block_size:,:] = 1
+        decoder_in[:,-self.config.n_predict_block_size:,:] = 0
+        decoder_in = decoder_in.to(self.decoder_linear.weight.device)
+        targets_mark = targets_mark.to(decoder_in.device)
         decoder_in = self.decoder_linear(decoder_in)
         decoder_in = self.decoder_ln(decoder_in)
         decoder_logits = self.decoder_embedding(decoder_in)
         decoder_logits = self.decoder_position_embedding_table(decoder_logits)
         decoder_logits = decoder_logits + self.decoder_temporal_embedding(targets_mark)
 
-        decoder_out, _ = self.decoder_blocks((decoder_logits, memory.to(decoder_logits.device)))
+        decoder_out, _ = self.decoder_blocks(
+            (decoder_logits, memory.to(decoder_logits.device)))
 
         # final mapping
         logits = self.final_linear1(decoder_out)
+        logits = self.final_block1(logits)
+        logits = self.final_linear2(logits)
         return logits[:,-self.config.n_predict_block_size:, :]
         # return logits
 
 @torch.no_grad()
-def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
+def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
     out = {}
     model.eval()
     for split in ['training', 'val']:
@@ -103,8 +120,9 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
                 config.n_predict_block_size,
                 split)
             logits = model.forward(x, x_mark, y, y_mark)
+            y = y.to(logits.device)
             loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
-                    y[:,-config.n_predict_block_size:,:_predict_feature_size])
+                y[:,-config.n_predict_block_size:,:_predict_feature_size])
             # loss = criterion(logits, y)
             losses[k] = loss.item()
         out[split] = losses.mean()
@@ -115,7 +133,7 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=2):
 def generate(model, config,  index, index_mark, target, target_mark, 
              checkpoint_path=None, step=1):
     checkpoint = None
-    # model.eval()
+    model.eval()
     print("Generating from path %s" %(checkpoint_path))
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
         if torch.cuda.device_count() == 1:
@@ -129,8 +147,12 @@ def generate(model, config,  index, index_mark, target, target_mark,
         buf = DataFrame.padOnes(config.n_predict_block_size, target)
         buf_mark = DataFrame.genTimestamp(
             target_mark[-1,-1], config.n_predict_block_size)
+        buf_mark = torch.concat(
+            (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
         pred = model.forward(index, index_mark, buf, buf_mark)
-        target = torch.concatenate((target, pred), dim=1)
+        target = target.to(pred.device)
+        target = torch.concatenate(
+            (target[:,:,:_predict_feature_size], pred[:,:,:_predict_feature_size]), dim=1)
     return target
 
 def train_and_update(model, config, get_batch, epoch, eval_interval):
@@ -166,10 +188,10 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_encoder_block_size,
             config.n_decoder_block_size,
             config.n_predict_block_size)
-        buf = DataFrame.genTimestamp(y_mark[-1,-1], config.n_predict_block_size)
         logits = model.forward(x, x_mark, y, y_mark)
+        y = y.to(logits.device)
         loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
-                y[:,-config.n_predict_block_size:,:_predict_feature_size])
+            y[:,-config.n_predict_block_size:,:_predict_feature_size])
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
         optimizer.zero_grad(set_to_none=True)
