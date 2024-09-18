@@ -31,18 +31,18 @@ config = Config(
         "XYLD",
         "RYLD",
     ],
-    batch_size = 5,
-    lr = 1e-5,
-    epoch = 10001,
-    eval_interval = 5e2,
+    batch_size = 20,
+    lr = 5e-6,
+    epoch = 3001,
+    eval_interval = 1e2,
 )
 
 informer_config = Config(
-    n_embed = 3000,
-    n_encoder_block_size = 1400,
+    n_embed = 2000,
+    n_encoder_block_size = 800,
     n_encoder_head = 10,
     n_encoder_layer = 2,
-    n_decoder_block_size = 600,
+    n_decoder_block_size = 400,
     n_decoder_head = 10,
     n_decoder_layer = 1,
     n_predict_block_size = 200,
@@ -73,7 +73,7 @@ model = EncoderDecoderInformer(informer_config)
 # model.to(informer_config.cuda0)
 
 if run_predict == 'y':
-    ix = 2700
+    ix = 5300
     criterion = torch.nn.MSELoss()
     raw, raw_mark = data.raw()
     pred = predict(model, data, informer_config,

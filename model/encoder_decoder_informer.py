@@ -64,7 +64,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.final_block1 = torch.nn.Sequential(*[
             EncoderBlock(config.n_features, config.n_decoder_head,
                 config.n_decoder_block_size + config.n_predict_block_size,
-                masked=True) for _ in range(16)]).to(self.config.cuda1)
+                masked=True) for _ in range(2)]).to(self.config.cuda1)
         self.final_linear2 = torch.nn.Linear(
             config.n_features, config.n_features).to(self.config.cuda1)
 
@@ -176,7 +176,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
         print("Clean run starts %s " % checkpoint_path)
     print("starting")
     for i in range(int(epoch)):
-        if i % eval_interval == 0 and i != 0:
+        if i % eval_interval == 0:
             losses = estimate_loss(model, config, criterion, get_batch)
             print(f"step {i}: train loss {losses['training']:.4f}, val loss {losses['val']:.4f}")
             torch.save({

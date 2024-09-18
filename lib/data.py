@@ -37,9 +37,8 @@ class DataFrame(object):
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
-        n = 5200
         print("data shape is ", self.data.shape)
-        # n = int(1 * len(self.data))
+        n = int(0.8 * len(self.data))
         self.train_data = self.data[:n]
         self.eval_data = self.data[n:]
 
