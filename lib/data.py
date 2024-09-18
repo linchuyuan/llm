@@ -40,7 +40,9 @@ class DataFrame(object):
         print("data shape is ", self.data.shape)
         n = int(0.8 * len(self.data))
         self.train_data = self.data[:n]
+        print("training shape is ", self.train_data.shape)
         self.eval_data = self.data[n:]
+        print("eval shape is ", self.eval_data.shape)
 
     @property
     def db(self):
