@@ -68,6 +68,22 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.final_linear2 = torch.nn.Linear(
             config.n_features, config.n_features).to(self.config.cuda1)
 
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, torch.nn.Embedding):
+            torch.nn.init.uniform_(module.weight, -0.1, 0.1)
+        elif isinstance(module, torch.nn.Linear):
+            # torch.nn.init.xavier_uniform_(module.weight)
+            torch.nn.init.kaiming_normal_(
+                module.weight,mode='fan_in',nonlinearity='leaky_relu')
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+        elif isinstance(module, torch.nn.Conv1d):
+            torch.nn.init.kaiming_normal_(
+                module.weight, mode='fan_in', nonlinearity='leaky_relu')
+            # torch.nn.init.xavier_uniform_(module.weight)
+
     def forward(self, index, index_mark, targets, targets_mark):
         # B, T
         B, T, C = index.shape
