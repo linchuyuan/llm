@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import torch
 import os
-import matplotlib.pyplot as plt_predict_feature_size_predict_feature_size
 import pdb
 import time
+from collections import OrderedDict
 
 from lib.encoder import EncoderBlock
 from lib.decoder import DecoderBlock
@@ -15,7 +15,8 @@ from lib.data import DataFrame
 from lib.layer_norm import LayerNorm
 from lib.temporal_embedding import TemporalEmbedding
 
-_predict_feature_size = 5
+_pred_start = 0
+_pred_end = 5
 class EncoderDecoderInformer(torch.nn.Module):
 
     def __init__(self, config : Config):
@@ -61,12 +62,6 @@ class EncoderDecoderInformer(torch.nn.Module):
         # final mapping
         self.final_linear1 = torch.nn.Linear(
             config.n_embed, config.n_features).to(self.config.cuda1)
-        self.final_block1 = torch.nn.Sequential(*[
-            EncoderBlock(config.n_features, config.n_decoder_head,
-                config.n_decoder_block_size + config.n_predict_block_size,
-                masked=True) for _ in range(8)]).to(self.config.cuda1)
-        self.final_linear2 = torch.nn.Linear(
-            config.n_features, config.n_features).to(self.config.cuda1)
 
         self.apply(self._init_weights)
 
@@ -118,8 +113,6 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # final mapping
         logits = self.final_linear1(decoder_out)
-        logits = self.final_block1(logits)
-        logits = self.final_linear2(logits)
         return logits[:,-self.config.n_predict_block_size:, :]
         # return logits
 
@@ -137,8 +130,8 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
                 split)
             logits = model.forward(x, x_mark, y, y_mark)
             y = y.to(logits.device)
-            loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
-                y[:,-config.n_predict_block_size:,:_predict_feature_size])
+            loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
+                y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
             # loss = criterion(logits, y)
             losses[k] = loss.item()
         out[split] = losses.mean()
@@ -147,7 +140,7 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
 
 def removeModulePrefidx(state_dict):
     new_state_dict = OrderedDict()
-    for k, n in state_dict.items():
+    for k, v in state_dict.items():
         name = k.replace("module.", "")
         new_state_dict[name] = v
     return new_state_dict
@@ -163,6 +156,8 @@ def generate(model, config,  index, index_mark, target, target_mark,
             checkpoint = torch.load(checkpoint_path, map_location=torch.device(config.cuda0))
         elif torch.cuda.device_count() == 0:
             checkpoint = torch.load(checkpoint_path, map_location=torch.device(config.cpu()))
+        else:
+            checkpoint = torch.load(checkpoint_path)
         state_dict = removeModulePrefidx(checkpoint["model_state_dict"])
         model.load_state_dict(checkpoint["model_state_dict"])
     else:
@@ -176,7 +171,7 @@ def generate(model, config,  index, index_mark, target, target_mark,
         pred = model.forward(index, index_mark, buf, buf_mark)
         target = target.to(pred.device)
         target = torch.concatenate(
-            (target[:,:,:_predict_feature_size], pred[:,:,:_predict_feature_size]), dim=1)
+            (target[:,:,_pred_start:_pred_end], pred[:,:,_pred_start:_pred_end]), dim=1)
     return target
 
 def train_and_update(model, config, get_batch, epoch, eval_interval):
@@ -216,8 +211,8 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_predict_block_size)
         logits = model.forward(x, x_mark, y, y_mark)
         y = y.to(logits.device)
-        loss = criterion(logits[:,-config.n_predict_block_size:, :_predict_feature_size],
-            y[:,-config.n_predict_block_size:,:_predict_feature_size])
+        loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
+            y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
         optimizer.zero_grad(set_to_none=True)
