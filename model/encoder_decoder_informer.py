@@ -192,7 +192,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
         print("Clean run starts %s " % checkpoint_path)
     print("starting")
     for i in range(int(epoch)):
-        if i % eval_interval == 0 and i != 0:
+        if i % eval_interval == 0:
             losses = estimate_loss(model, config, criterion, get_batch)
             print(f"step {i}: train loss {losses['training']:.4f}, val loss {losses['val']:.4f}")
             torch.save({

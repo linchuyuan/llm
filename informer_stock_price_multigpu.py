@@ -27,19 +27,16 @@ config = Config(
         "UVIX",
         "QQQ",
         "TQQQ",
-        "QYLD",
-        "XYLD",
-        "RYLD",
     ],
     batch_size = 8,
     lr = 5e-6,
     epoch = 3001,
-    eval_interval = 1e2,
+    eval_interval = 1e1,
 )
 
 informer_config = Config(
     n_embed = 2000,
-    n_encoder_block_size = 800,
+    n_encoder_block_size = 1000,
     n_encoder_head = 10,
     n_encoder_layer = 2,
     n_decoder_block_size = 400,
@@ -73,7 +70,7 @@ model = EncoderDecoderInformer(informer_config)
 # model.to(informer_config.cuda0)
 
 if run_predict == 'y':
-    ix = 7000
+    ix = 5000
     criterion = torch.nn.MSELoss()
     raw, raw_mark = data.raw()
     pred = predict(model, data, informer_config,
