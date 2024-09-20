@@ -23,6 +23,9 @@ class Config(object):
     def __setitem__(self, k, v):
         self.__dict__[k] = v
 
+    def cpu(self):
+        return "cpu"
+
     def cuda(self, idx: int):
         cuda_device_count = torch.cuda.device_count()
         if cuda_device_count == 0 or FORCE_CPU:

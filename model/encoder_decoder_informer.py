@@ -145,6 +145,13 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
     model.train()
     return out
 
+def removeModulePrefidx(state_dict):
+    new_state_dict = OrderedDict()
+    for k, n in state_dict.items():
+        name = k.replace("module.", "")
+        new_state_dict[name] = v
+    return new_state_dict
+
 @torch.no_grad()
 def generate(model, config,  index, index_mark, target, target_mark, 
              checkpoint_path=None, step=1):
@@ -154,9 +161,10 @@ def generate(model, config,  index, index_mark, target, target_mark,
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
         if torch.cuda.device_count() == 1:
             checkpoint = torch.load(checkpoint_path, map_location=torch.device(config.cuda0))
-        else:
-            checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint['model_state_dict'])
+        elif torch.cuda.device_count() == 0:
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device(config.cpu()))
+        state_dict = removeModulePrefidx(checkpoint["model_state_dict"])
+        model.load_state_dict(checkpoint["model_state_dict"])
     else:
         raise SystemError("No checkpoint available.")
     for _ in range(step):
