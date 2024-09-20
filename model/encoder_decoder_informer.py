@@ -195,10 +195,12 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
         if i % eval_interval == 0:
             losses = estimate_loss(model, config, criterion, get_batch)
             print(f"step {i}: train loss {losses['training']:.4f}, val loss {losses['val']:.4f}")
-            torch.save({
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-            }, checkpoint_path)
+            if i % 200 == 0:
+                print("checkpointing")
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                }, checkpoint_path)
             scheduler.step(losses['val'])  # Step the scheduler with the validation loss
         x, x_mark, y, y_mark = get_batch(config.batch_size,
             config.n_encoder_block_size,
