@@ -15,8 +15,8 @@ from lib.data import DataFrame
 from lib.layer_norm import LayerNorm
 from lib.temporal_embedding import TemporalEmbedding
 
-_pred_start = 0
-_pred_end = 5
+_pred_start = 0 * 6 # TSLA
+_pred_end = _pred_start + 5 # TSLA
 class EncoderDecoderInformer(torch.nn.Module):
 
     def __init__(self, config : Config):

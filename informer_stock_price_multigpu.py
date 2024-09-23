@@ -28,15 +28,19 @@ config = Config(
         "QQQ",
         "TQQQ",
         "TSLA",
+        "MSFT",
+        "GOOGL",
+        "META",
+        "SNAP",
     ],
     batch_size = 1,
     lr = 5e-6,
-    epoch = 3001,
+    epoch = 5001,
     eval_interval = 1e1,
 )
 
 informer_config = Config(
-    n_embed = 2000,
+    n_embed = 2400,
     n_encoder_block_size = 800,
     n_encoder_head = 10,
     n_encoder_layer = 10,
@@ -71,7 +75,7 @@ model = EncoderDecoderInformer(informer_config)
 # model.to(informer_config.cuda0)
 
 if run_predict == 'y':
-    ix = 6700
+    ix = int(input("Enter idx: "))
     criterion = torch.nn.MSELoss()
     raw, raw_mark = data.raw()
     pred = predict(model, data, informer_config,
