@@ -62,6 +62,12 @@ class EncoderDecoderInformer(torch.nn.Module):
         # final mapping
         self.final_linear1 = torch.nn.Linear(
             config.n_embed, config.n_features).to(self.config.cuda1)
+        self.final_block1 = torch.nn.Sequential(*[
+            EncoderBlock(config.n_features, config.n_decoder_head,
+                config.n_decoder_block_size + config.n_predict_block_size,
+                masked=True) for _ in range(8)]).to(self.config.cuda1)
+        self.final_linear2 = torch.nn.Linear(
+            config.n_features, config.n_features).to(self.config.cuda1)
 
         self.apply(self._init_weights)
 
@@ -113,8 +119,9 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # final mapping
         logits = self.final_linear1(decoder_out)
+        logits = self.final_block1(logits)
+        logits = self.final_linear2(logits)
         return logits[:,-self.config.n_predict_block_size:, :]
-        # return logits
 
 @torch.no_grad()
 def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
