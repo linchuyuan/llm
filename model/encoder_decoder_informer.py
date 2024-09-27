@@ -16,7 +16,7 @@ from lib.layer_norm import LayerNorm
 from lib.temporal_embedding import TemporalEmbedding
 
 _pred_start = 0 * 6 # TSLA
-_pred_end = _pred_start + 5 # TSLA
+_pred_end = _pred_start + 7 # TSLA
 class EncoderDecoderInformer(torch.nn.Module):
 
     def __init__(self, config : Config):
@@ -24,7 +24,6 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.config = config
 
         # encoder block
-        self.dropout = torch.nn.Dropout(dropout)
         self.encoder_linear = torch.nn.Linear(self.config.n_features,
             self.config.n_features).to(self.config.cuda0)
         self.encoder_ln = LayerNorm(
@@ -88,10 +87,6 @@ class EncoderDecoderInformer(torch.nn.Module):
     def forward(self, index, index_mark, targets, targets_mark):
         # B, T
         B, T, C = index.shape
-
-        # dropout
-        index = self.dropout(index)
-        targets = self.dropout(targets)
 
         # encoder
         index = self.encoder_linear(index)

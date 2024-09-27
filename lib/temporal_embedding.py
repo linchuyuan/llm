@@ -7,7 +7,7 @@ class TemporalEmbedding(torch.nn.Module):
     hour_size = 24
     weekday_size = 7
     day_size = 32
-    month_size = 12
+    month_size = 13
     year_size = 20
 
     # [y:2024, m:8, wd:2, d:14, h:14, min10]
@@ -35,5 +35,5 @@ class TemporalEmbedding(torch.nn.Module):
         weekday = self.weekday_embed(x[:,:,2])
         day = self.day_embed(x[:,:,3])
         month = self.month_embed(x[:,:,1])
-        year = self.year_embed(x[:,:,0] - 2024)
+        year = self.year_embed(x[:,:,0] - 2020)
         return minute + hour + weekday + day + month + year

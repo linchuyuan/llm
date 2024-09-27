@@ -34,19 +34,19 @@ config = Config(
         "SNAP",
     ],
     batch_size = 1,
-    lr = 5e-6,
+    lr = 5e-4,
     epoch = 5001,
     eval_interval = 1e1,
 )
 
 informer_config = Config(
-    n_embed = 2400,
+    n_embed = 3000,
     n_encoder_block_size = 800,
     n_encoder_head = 10,
-    n_encoder_layer = 10,
+    n_encoder_layer = 4,
     n_decoder_block_size = 400,
     n_decoder_head = 10,
-    n_decoder_layer = 10,
+    n_decoder_layer = 5,
     n_predict_block_size = 200,
     lr = config.lr,
     batch_size = config.batch_size,
@@ -82,12 +82,13 @@ if run_predict == 'y':
         ix=ix, checkpoint_path=informer_config.informerCheckpointPath())
     plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
     actual_start = ix + informer_config.n_encoder_block_size - informer_config.n_decoder_block_size
-    actual = raw[actual_start:actual_start + len(pred[0]), predict_feature_ix]
-    plt.plot(actual.flatten().cpu().numpy(), label="Actual")
+    actual = raw[actual_start:actual_start + len(pred[0])]
+    plt.plot(actual[:, 0].flatten().cpu().numpy(), label="Actual")
     plt.legend()
 
-    pred = pred[:,:,predict_feature_ix]
-    loss = criterion(pred.flatten().to(config.cuda0), actual.flatten().to(config.cuda0))
+    loss = criterion(
+        pred[:,-informer_config.n_predict_block_size:,0:5].flatten().to(config.cuda0),
+        actual[-informer_config.n_predict_block_size:,0:5].flatten().to(config.cuda0))
     print("Predict loss is ", loss.item())
     plt.show()
 elif run_predict == 'p':

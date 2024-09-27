@@ -41,7 +41,7 @@ def getStockHistory(symbol, api_key=None, start_date=None, duration=None):
     }
     while current_start < end_date:
         # Define the start and end of the current month
-        current_end = current_start + timedelta(days=60)
+        current_end = current_start + timedelta(days=90)
         if current_end > end_date:
             current_end = end_date
 

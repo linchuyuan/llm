@@ -34,7 +34,7 @@ class DataFrame(object):
                 self.data = pandas.concat([db, self.data])
                 self.data = self.data[~self.data.index.duplicated(keep='last')]
                 self.data = self.data.fillna(0)
-        self.dataFlush()
+            self.dataFlush()
         self.addTemporalData(self.data)
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
@@ -143,5 +143,5 @@ class DataFrame(object):
 
     @staticmethod
     def padOnes(token_size, index):
-        ones = torch.ones((1, token_size, len(index[0,0]))).to(index.device)
+        ones = torch.zeros((1, token_size, len(index[0,0]))).to(index.device)
         return torch.concatenate((index, ones), dim=1)      
