@@ -60,7 +60,9 @@ def getStockHistory(symbol, api_key=None, start_date=None, duration=None):
 
             # Extract the results (each result corresponds to a 2-minute bar)
             results = data.get('results', [])
-            if len(results) == 0:
+            status = data.get('status', None)
+            err = data.get('error', None)
+            if len(results) == 0 and status is not None and err is not None:
                 print(data)
                 t.sleep(70)
                 continue
@@ -69,8 +71,10 @@ def getStockHistory(symbol, api_key=None, start_date=None, duration=None):
             if results:
                 df = pd.DataFrame(results)
                 df['timestamp'] = pd.to_datetime(df['t'], unit='ms')
-                df = df[['timestamp', 'o', 'h', 'l', 'c', 'v', 'vw', 'n']]
-                df.columns = ['Datetime', 'Open', 'High', 'Low', 'Close', 'Volume', 'VolumeWeighted', 'Trasaction']
+                df['s'] = symbol
+                df = df[['timestamp', 'o', 'h', 'l', 'c', 'v', 'vw', 'n', 's']]
+                df.columns = ['Datetime', 'Open', 'High', 'Low',
+                              'Close', 'Volume', 'VolumeWeighted', 'Trasaction', 'Symbol']
                 df_all = pd.concat([df_all, df], ignore_index=True)
 
             # Check if there is a 'next_url' for pagination, otherwise exit the loop

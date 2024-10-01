@@ -7,7 +7,10 @@ dropout = 0.1
 
 class Config(object):
 
-    def __init__(self, *args, **kargs):
+    def __init__(self, config=None, *args, **kargs):
+        if config is not None:
+            for k, v in config.__dict__.items():
+                self.__setitem__(k, v)
         for item in args:
             k = item[0]
             v = item[1]
@@ -22,6 +25,9 @@ class Config(object):
 
     def __setitem__(self, k, v):
         self.__dict__[k] = v
+
+    def __str__(self):
+        return str(self.__dict__)
 
     def cpu(self):
         return "cpu"
