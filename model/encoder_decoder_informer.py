@@ -24,12 +24,12 @@ class EncoderDecoderInformer(torch.nn.Module):
         self.config = config
 
         # encoder block
-        self.encoder_linear = torch.nn.Linear(self.config.n_features,
-            self.config.n_features).to(self.config.cuda0)
+        self.encoder_linear = torch.nn.Linear(self.config.n_encoder_features,
+            self.config.n_encoder_features).to(self.config.cuda0)
         self.encoder_ln = LayerNorm(
             self.config.n_encoder_block_size).to(self.config.cuda0)
         self.encoder_embedding = TokenEmbedding(
-            config.n_features, config.n_embed).to(self.config.cuda0)
+            config.n_encoder_features, config.n_embed).to(self.config.cuda0)
         self.encoder_position_embedding_table = SinusoidalPositionalEmbedding(
             config.n_embed, 5000).to(self.config.cuda0)
         self.encoder_temporal_embedding = TemporalEmbedding(
@@ -41,13 +41,13 @@ class EncoderDecoderInformer(torch.nn.Module):
 
 
         # decoder block
-        self.decoder_linear = torch.nn.Linear(self.config.n_features,
-            self.config.n_features).to(self.config.cuda1)
+        self.decoder_linear = torch.nn.Linear(self.config.n_decoder_features,
+            self.config.n_decoder_features).to(self.config.cuda1)
         self.decoder_ln = LayerNorm(
             self.config.n_decoder_block_size+self.config.n_predict_block_size).to(
                 self.config.cuda1)
         self.decoder_embedding = TokenEmbedding(
-            config.n_features, config.n_embed).to(self.config.cuda1)
+            config.n_decoder_features, config.n_embed).to(self.config.cuda1)
         self.decoder_position_embedding_table = SinusoidalPositionalEmbedding(
             config.n_embed, 5000).to(self.config.cuda1)
         self.decoder_temporal_embedding = TemporalEmbedding(
@@ -60,13 +60,13 @@ class EncoderDecoderInformer(torch.nn.Module):
 
         # final mapping
         self.final_linear1 = torch.nn.Linear(
-            config.n_embed, config.n_features).to(self.config.cuda1)
+            config.n_embed, config.n_decoder_features).to(self.config.cuda1)
         self.final_block1 = torch.nn.Sequential(*[
-            EncoderBlock(config.n_features, config.n_decoder_head,
+            EncoderBlock(config.n_decoder_features, config.n_decoder_head,
                 config.n_decoder_block_size + config.n_predict_block_size,
                 masked=True) for _ in range(8)]).to(self.config.cuda1)
         self.final_linear2 = torch.nn.Linear(
-            config.n_features, config.n_features).to(self.config.cuda1)
+            config.n_decoder_features, config.n_decoder_features).to(self.config.cuda1)
 
         self.apply(self._init_weights)
 
@@ -93,12 +93,10 @@ class EncoderDecoderInformer(torch.nn.Module):
         index = self.encoder_ln(index)
         encoder_logits = self.encoder_embedding(index)
         encoder_logits = self.encoder_position_embedding_table(encoder_logits)
-        encoder_logits = encoder_logits + self.encoder_temporal_embedding(index_mark)
+        encoder_logits += self.encoder_temporal_embedding(index_mark)
         memory = self.encoder_blocks(encoder_logits)
 
         # decoder
-        # pred = targets[:, -self.config.n_predict_block_size:, :].clone().detach()
-        # decoder_in = targets[:, :self.config.n_decoder_block_size, :].clone().detach()
         decoder_in = targets.clone().detach()
         decoder_in[:,-self.config.n_predict_block_size:,:] = 0
         decoder_in = decoder_in.to(self.decoder_linear.weight.device)

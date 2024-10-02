@@ -6,6 +6,8 @@ import torch
 import pdb
 import os
 from lib.data import DataFrame
+from lib.polygon import getOptionTickers
+from lib.data_manager import DataFrameManager
 from lib.config import Config
 from model.encoder_decoder_informer import \
         EncoderDecoderInformer, \
@@ -42,7 +44,6 @@ config = Config(
 config = Config(
     config = config,
     n_embed = 3000,
-    n_encoder_block_size = 800,
     n_encoder_head = 10,
     n_encoder_layer = 4,
     n_decoder_block_size = 400,
@@ -51,23 +52,38 @@ config = Config(
     n_predict_block_size = 200,
 )
 
+o_config = Config(
+    config = config,
+    tickers = getOptionTickers('META')
+)
+o_data = DataFrame(
+    o_config.tickers,
+    config.cuda0,
+    is_option=True,
+    db_file="option_db.pickle",
+)
+s_data = DataFrame(
+    config.tickers,
+    config.cuda0,
+    is_option=False,
+    db_file="db.pickle",
+)
+
+data = DataFrameManager(s_data, o_data)
+x, x_mark, y, y_mark = data.getBatch(
+    config.batch_size,
+    src_block_size=0,
+    tgt_block_size=config.n_decoder_block_size,
+    pred_block_size=config.n_predict_block_size)
+_, _, config.n_decoder_features = y.shape
+_, config.n_encoder_block_size, config.n_encoder_features = x.shape
+
 def predict(model, data, config, ix=0, step=1, checkpoint_path=None):
     x, x_mark, y, y_mark = data.getInputWithIx(config.n_encoder_block_size,
         config.n_decoder_block_size, config.n_predict_block_size, ix)
-    predict = generate(model, config, x, x_mark, y, y_mark, 
+    predict = generate(model, config, x, x_mark, y, y_mark,
         checkpoint_path=checkpoint_path, step=step)
     return predict
-
-data = DataFrame(
-    config.tickers,
-    config.cuda0)
-
-x, x_mark, y, y_mark = data.getBatch(
-    config.batch_size,
-    src_block_size=config.n_encoder_block_size,
-    tgt_block_size=config.n_decoder_block_size,
-    pred_block_size=config.n_predict_block_size)
-_, _, config.n_features = x.shape
 
 model = EncoderDecoderInformer(config)
 # model = torch.nn.DataParallel(model)

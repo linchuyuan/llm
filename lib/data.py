@@ -10,21 +10,27 @@ import os
 
 from lib.polygon import getStockHistory
 
-DB_FILE = "db.pickle"
 class DataFrame(object):
-    def __init__(self, ticker_list, device):
+    def __init__(self, ticker_list:list, device:str, is_option:bool, db_file:str):
+        self.is_option = is_option
+        self.db_file = db_file
         self.data = None
-        if self.tradingAvailable() and 'update_db' in os.environ:
+        if 'update_db' in os.environ:
             for ticker in ticker_list:
                 hist = getStockHistory(ticker)
                 if hist is None or hist.empty:
                     continue
-                hist = hist.add_prefix(ticker)
+                if not self.is_option:
+                    hist = hist.add_prefix(ticker)
                 if self.data is None:
                     self.data = hist
                 else:
-                    self.data = pandas.merge(
-                        self.data, hist, on='Datetime', how='outer')
+                    if self.is_option:
+                        self.data = pandas.concat([hist, self.data])
+                        self.data = self.data.sort_index()
+                    else:
+                        self.data = pandas.merge(
+                            self.data, hist, on='Datetime', how='outer')
             self.data = self.data.fillna(0)
         if self.data is None:
             self.data = self.load()
@@ -32,10 +38,16 @@ class DataFrame(object):
             db = self.load()
             if db is not None:
                 self.data = pandas.concat([db, self.data])
-                self.data = self.data[~self.data.index.duplicated(keep='last')]
+                # self.data = self.data[~self.data.index.duplicated(keep='last')]
+                self.data = self.data.drop_duplicates()
                 self.data = self.data.fillna(0)
             self.dataFlush()
         self.addTemporalData(self.data)
+        self.data_frame = self.data
+        self.data_option_label = None
+        if self.is_option:
+            self.data_option_label = self.data['Symbol']
+            self.data = self.data.drop('Symbol', axis=1)
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
@@ -49,7 +61,7 @@ class DataFrame(object):
     @property
     def db(self):
         if not hasattr(self, '_db'):
-            self._db = pandas.read_pickle(DB_FILE)
+            self._db = pandas.read_pickle(self.db_file)
         return self._db
 
     def load(self):
@@ -61,7 +73,7 @@ class DataFrame(object):
 
     def dataFlush(self):
         if self.data is not None:
-            self.data.to_pickle(DB_FILE)
+            self.data.to_pickle(self.db_file)
 
     def tradingAvailable(self):
         curr = datetime.datetime.now(pytz.timezone('US/Eastern'))
@@ -72,37 +84,33 @@ class DataFrame(object):
             return False
         return True
 
-    def getBatch(self, batch_size : int, src_block_size: int,
-                 tgt_block_size, pred_block_size: int, split='training'):
+    def getOptionBatch(self, batch_size:int):
+        x, y = self.raw()
+        x = torch.stack([ x for i in range(batch_size)])
+        y = torch.stack([ y for i in range(batch_size)])
+        return x, y
+
+
+    def getBatch(self, batch_size:int, tgt_block_size:int, pred_block_size:int, split='training'):
         if split == "training":
             training_data = self.train_data
         else:
             training_data = self.eval_data
-        ix_range = len(training_data) - src_block_size - pred_block_size
+        ix_range = len(training_data) - tgt_block_size - pred_block_size
         ix = torch.randint(ix_range, (batch_size,))
-        x = torch.stack([ training_data[i:i+src_block_size] for i in ix])
-        y = torch.stack(
-            [ training_data[
-                i+src_block_size-tgt_block_size:i+src_block_size+pred_block_size] for i in ix]
-        )
-        return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
+        x = torch.stack([ training_data[i:i+tgt_block_size+pred_block_size] for i in ix])
+        return x[:,:,:-6], x[:,:,-6:]
 
-    def getInputWithIx(self, src_block_size: int,
-                       tgt_block_size: int, pred_block_size:int, ix: int):
+    def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
         i = ix
-        x = self.data[i:i+src_block_size].unsqueeze(0)
-        y = self.data[
-            i+src_block_size-tgt_block_size:i+src_block_size].unsqueeze(0)
-        return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
+        x = self.data[i:i+tgt_block_size].unsqueeze(0)
+        return x[:,:,:-6], x[:,:,-6:]
 
-    def getLatest(self, src_block_size: int,
-                  tgt_block_size: int):
+    def getLatest(self, tgt_block_size: int):
         num_data = len(self.data)
-        src_block_start = num_data - src_block_size
         tgt_block_start = num_data - tgt_block_size
-        x = self.data[src_block_start:].unsqueeze(0)
-        y = self.data[tgt_block_start:].unsqueeze(0)
-        return x[:,:,:-6], x[:,:,-6:], y[:,:,:-6], y[:,:,-6:]
+        x = self.data[tgt_block_start:].unsqueeze(0)
+        return x[:,:,:-6], x[:,:,-6:]
 
     def raw(self):
         return self.data[:,:-6], self.data[:,-6:]

@@ -47,6 +47,6 @@ class Config(object):
             self.n_encoder_layer,
             self.n_encoder_block_size,
             self.n_embed,
-            self.n_features,
+            self.n_decoder_features,
             self.n_predict_block_size,
         )
