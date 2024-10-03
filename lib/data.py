@@ -10,11 +10,25 @@ import os
 
 from lib.polygon import getStockHistory
 
+class Tokenizer(object):
+
+    def __init__(self, items:set):
+        self.stoi = dict()
+        for v, k in enumerate(items):
+            self.stoi[k] = v
+ 
+    def convert(self, string:str):
+        return [self.stoi[string]]
+
+    def size(self):
+        return len(self.stoi)
+
 class DataFrame(object):
     def __init__(self, ticker_list:list, device:str, is_option:bool, db_file:str):
         self.is_option = is_option
         self.db_file = db_file
         self.data = None
+        self.n_unique_ticker = None
         if 'update_db' in os.environ:
             for ticker in ticker_list:
                 hist = getStockHistory(ticker)
@@ -46,7 +60,12 @@ class DataFrame(object):
         self.data_frame = self.data
         self.data_option_label = None
         if self.is_option:
-            self.data_option_label = self.data['Symbol']
+            self.data_option_label = self.data['Symbol'].to_list()
+            tokenizer = Tokenizer(set(self.data_option_label))
+            self.n_unique_ticker = tokenizer.size()
+            self.data_option_label = torch.tensor(
+                [tokenizer.convert(l) for l in self.data_option_label])
+            self.data_option_label = self.data_option_label.to(device)
             self.data = self.data.drop('Symbol', axis=1)
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
@@ -86,9 +105,14 @@ class DataFrame(object):
 
     def getOptionBatch(self, batch_size:int):
         x, y = self.raw()
+        l = 8000
+        x = x[:l]
+        y = y[:l]
+        z = self.data_option_label[:l]
         x = torch.stack([ x for i in range(batch_size)])
         y = torch.stack([ y for i in range(batch_size)])
-        return x, y
+        z = torch.stack([ z for i in range(batch_size)])
+        return x, y, z
 
 
     def getBatch(self, batch_size:int, tgt_block_size:int, pred_block_size:int, split='training'):

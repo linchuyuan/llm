@@ -43,12 +43,12 @@ config = Config(
 
 config = Config(
     config = config,
-    n_embed = 3000,
+    n_embed = 2000,
     n_encoder_head = 10,
-    n_encoder_layer = 4,
-    n_decoder_block_size = 400,
+    n_encoder_layer = 1,
+    n_decoder_block_size = 1000,
     n_decoder_head = 10,
-    n_decoder_layer = 5,
+    n_decoder_layer = 1,
     n_predict_block_size = 200,
 )
 
@@ -70,18 +70,19 @@ s_data = DataFrame(
 )
 
 data = DataFrameManager(s_data, o_data)
-x, x_mark, y, y_mark = data.getBatch(
+x, x_mark, x_ticker, y, y_mark = data.getBatch(
     config.batch_size,
     src_block_size=0,
     tgt_block_size=config.n_decoder_block_size,
     pred_block_size=config.n_predict_block_size)
 _, _, config.n_decoder_features = y.shape
 _, config.n_encoder_block_size, config.n_encoder_features = x.shape
+config.n_unique_ticker = o_data.n_unique_ticker
 
 def predict(model, data, config, ix=0, step=1, checkpoint_path=None):
-    x, x_mark, y, y_mark = data.getInputWithIx(config.n_encoder_block_size,
+    x, x_mark, x_ticker, y, y_mark = data.getInputWithIx(
         config.n_decoder_block_size, config.n_predict_block_size, ix)
-    predict = generate(model, config, x, x_mark, y, y_mark,
+    predict = generate(model, config, x, x_mark, x_ticker, y, y_mark,
         checkpoint_path=checkpoint_path, step=step)
     return predict
 
@@ -96,21 +97,19 @@ if run_predict == 'y':
     pred = predict(model, data, config,
         ix=ix, checkpoint_path=config.informerCheckpointPath())
     plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
-    actual_start = ix + config.n_encoder_block_size - config.n_decoder_block_size
-    actual = raw[actual_start:actual_start + len(pred[0])]
+    actual = raw[ix:ix + len(pred[0])]
     plt.plot(actual[:, 0].flatten().cpu().numpy(), label="Actual")
     plt.legend()
 
     loss = criterion(
-        pred[:,-config.n_predict_block_size:,0:5].flatten().to(config.cuda0),
-        actual[-config.n_predict_block_size:,0:5].flatten().to(config.cuda0))
+        pred[:,-config.n_predict_block_size:,0:1].flatten().to(config.cuda0),
+        actual[-config.n_predict_block_size:,0:1].flatten().to(config.cuda0))
     print("Predict loss is ", loss.item())
     plt.show()
 elif run_predict == 'p':
-    x, x_mark, y, y_mark = data.getLatest(config.n_encoder_block_size,
+    x, x_mark, x_ticker, y, y_mark = data.getLatest(
         config.n_decoder_block_size)
-    # x = data.raw()[:5000].unsqueeze(0)
-    predict = generate(model, config, x, x_mark, y, y_mark, 
+    predict = generate(model, config, x, x_mark, x_ticker, y, y_mark, 
         checkpoint_path=config.informerCheckpointPath())
     predict = predict.cpu()
     plt.plot(predict[0, :, predict_feature_ix].flatten().numpy())
