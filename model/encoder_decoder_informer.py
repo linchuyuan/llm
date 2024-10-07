@@ -165,7 +165,7 @@ def generate(model, config,  index, index_mark, index_ticker,
         else:
             checkpoint = torch.load(checkpoint_path)
         state_dict = removeModulePrefidx(checkpoint["model_state_dict"])
-        model.load_state_dict(checkpoint["model_state_dict"])
+        model.load_state_dict(state_dict)
     else:
         raise SystemError("No checkpoint available.")
     for _ in range(step):
@@ -189,12 +189,19 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
     checkpoint_path = config.informerCheckpointPath()
     if checkpoint_path is not None and os.path.exists(checkpoint_path):
         print("Resume from %s..." % checkpoint_path)
-        checkpoint = torch.load(checkpoint_path)
+        if torch.cuda.device_count() == 1:
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device(config.cuda0))
+        elif torch.cuda.device_count() == 0:
+            checkpoint = torch.load(checkpoint_path, map_location=torch.device(config.cpu()))
+        else:
+            checkpoint = torch.load(checkpoint_path)
+        state_dict = removeModulePrefidx(checkpoint["model_state_dict"])
         try:
-            model.load_state_dict(checkpoint['model_state_dict'])
+            model.load_state_dict(state_dict)
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             del checkpoint
-            torch.cuda.empty_cache()
+            if torch.cuda.device_count() > 0:
+                torch.cuda.empty_cache()
         except:
             print("Unable to restore from previous checkpoint, restaring...")
     else:

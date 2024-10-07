@@ -109,7 +109,7 @@ class DataFrame(object):
         l = 5000
         x = x[-l:]
         y = y[-l:]
-        z = self.data_option_label[:l]
+        z = self.data_option_label[-l:]
         x = torch.stack([ x for i in range(batch_size)])
         y = torch.stack([ y for i in range(batch_size)])
         z = torch.stack([ z for i in range(batch_size)])
