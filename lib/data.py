@@ -57,6 +57,7 @@ class DataFrame(object):
                 self.data = self.data.fillna(0)
             self.dataFlush()
         self.addTemporalData(self.data)
+        self.data = self.data[self.data.index >= '2024-08-22 11:08:00']
         self.data_frame = self.data
         self.data_option_label = None
         if self.is_option:
@@ -105,9 +106,9 @@ class DataFrame(object):
 
     def getOptionBatch(self, batch_size:int):
         x, y = self.raw()
-        l = 8000
-        x = x[:l]
-        y = y[:l]
+        l = 5000
+        x = x[-l:]
+        y = y[-l:]
         z = self.data_option_label[:l]
         x = torch.stack([ x for i in range(batch_size)])
         y = torch.stack([ y for i in range(batch_size)])

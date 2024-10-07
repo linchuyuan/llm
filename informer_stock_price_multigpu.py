@@ -37,18 +37,18 @@ config = Config(
     ],
     batch_size = 1,
     lr = 5e-4,
-    epoch = 5001,
-    eval_interval = 1e1,
+    epoch = 55001,
+    eval_interval = 1e2,
 )
 
 config = Config(
     config = config,
-    n_embed = 2000,
+    n_embed = 3000,
     n_encoder_head = 10,
     n_encoder_layer = 1,
     n_decoder_block_size = 1000,
     n_decoder_head = 10,
-    n_decoder_layer = 1,
+    n_decoder_layer = 2,
     n_predict_block_size = 200,
 )
 
