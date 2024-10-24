@@ -14,6 +14,7 @@ class Tokenizer(object):
 
     def __init__(self, items:set):
         self.stoi = dict()
+        items = sorted(items)
         for v, k in enumerate(items):
             self.stoi[k] = v
  
@@ -27,6 +28,7 @@ class DataFrame(object):
     def __init__(self, ticker_list:list, device:str, is_option:bool, db_file:str):
         self.is_option = is_option
         self.db_file = db_file
+        self.device = device
         self.data = None
         self.n_unique_ticker = None
         if 'update_db' in os.environ:
@@ -71,11 +73,14 @@ class DataFrame(object):
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data).to(device)
+        self.splitTrainingEval()
+
+    def splitTrainingEval(self):
         print("data shape is ", self.data.shape)
-        n = int(0.8 * len(self.data))
-        self.train_data = self.data[:n]
+        n = int(0.2 * len(self.data))
+        self.train_data = self.data[n:]
         print("training shape is ", self.train_data.shape)
-        self.eval_data = self.data[n:]
+        self.eval_data = self.data[:n]
         print("eval shape is ", self.eval_data.shape)
 
     @property
@@ -104,15 +109,48 @@ class DataFrame(object):
             return False
         return True
 
-    def getOptionBatch(self, batch_size:int):
-        x, y = self.raw()
-        l = 5000
-        x = x[-l:]
-        y = y[-l:]
-        z = self.data_option_label[-l:]
-        x = torch.stack([ x for i in range(batch_size)])
-        y = torch.stack([ y for i in range(batch_size)])
-        z = torch.stack([ z for i in range(batch_size)])
+    """
+    align option db and stock db
+    """
+    def align(self, to, encoder_block_size:int = 5000):
+        del self.data
+        self.data = list()
+        data_option_label = list()
+        i = 0
+        for index, row in to.data_frame.iterrows():
+            print("Process ", index, end='\r')
+            buf = self.data_frame[self.data_frame.index <= index].iloc[
+                -encoder_block_size:].drop('Symbol', axis=1)
+            T, C = buf.shape
+            data = np.zeros((encoder_block_size, C), dtype=np.float32)
+            data[:T, :] = buf
+            self.data.append(data)
+            _, C = self.data_option_label.shape
+            label = np.zeros((encoder_block_size, C), dtype=np.int32)
+            self.data_option_label = self.data_option_label.to('cpu')
+            buf = self.data_option_label[i:i+T]
+            label[:len(buf)] = buf
+            i += 1
+            data_option_label.append(label)
+        self.data_option_label = torch.from_numpy(
+            np.array(data_option_label)).to(self.device)
+        self.data = torch.from_numpy(np.array(self.data)).to(self.device)
+        # set years to 2020 as default
+        years = self.data[:, :, -6]
+        years = torch.where(years == 0, years + 2020, years)
+        self.data[:, :, -6] = years
+        self.splitTrainingEval()
+
+    def getOptionBatch(self, seed:list, split='training'):
+        if split == "training":
+            training_data = self.train_data
+        else:
+            training_data = self.eval_data
+        x = training_data[:,:,:-6]
+        y = training_data[:,:,-6:]
+        x = torch.stack([ x[i] for i in seed ])
+        y = torch.stack([ y[i] for i in seed ])
+        z = torch.stack([ self.data_option_label[i] for i in seed ])
         return x, y, z
 
 
@@ -123,12 +161,13 @@ class DataFrame(object):
             training_data = self.eval_data
         ix_range = len(training_data) - tgt_block_size - pred_block_size
         ix = torch.randint(ix_range, (batch_size,))
+        # ix = [5000]
         x = torch.stack([ training_data[i:i+tgt_block_size+pred_block_size] for i in ix])
-        return x[:,:,:-6], x[:,:,-6:]
+        return x[:,:,:-6], x[:,:,-6:], ix
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
         i = ix
-        x = self.data[i:i+tgt_block_size].unsqueeze(0)
+        x = self.train_data[i:i+tgt_block_size].unsqueeze(0)
         return x[:,:,:-6], x[:,:,-6:]
 
     def getLatest(self, tgt_block_size: int):
@@ -138,7 +177,7 @@ class DataFrame(object):
         return x[:,:,:-6], x[:,:,-6:]
 
     def raw(self):
-        return self.data[:,:-6], self.data[:,-6:]
+        return self.train_data[:,:-6], self.train_data[:,-6:]
 
     @staticmethod
     def genTimestamp(start, periods):
@@ -154,10 +193,10 @@ class DataFrame(object):
         current_datetime = start_datetime
         while len(valid_timestamps) <= periods + 1:
             sequence = pandas.date_range(
-                start=current_datetime, periods=1000, freq='2min')  # Generate a large chunk
+                start=current_datetime, periods=2000, freq='1min')  # Generate a large chunk
             trading_hours_sequence = sequence[
                 (sequence.time >= pandas.Timestamp("09:30").time()) &
-                (sequence.time < pandas.Timestamp("16:00").time())]
+                (sequence.time <= pandas.Timestamp("16:00").time())]
             valid_timestamps.extend(trading_hours_sequence[1:])
             current_datetime = valid_timestamps[-1]
         valid_timestamps = valid_timestamps[:periods]
