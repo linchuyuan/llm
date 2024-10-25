@@ -112,7 +112,7 @@ class DataFrame(object):
     """
     align option db and stock db
     """
-    def align(self, to, encoder_block_size:int = 5000):
+    def align(self, to, encoder_block_size:int = 8000):
         del self.data
         self.data = list()
         data_option_label = list()
@@ -159,15 +159,13 @@ class DataFrame(object):
             training_data = self.train_data
         else:
             training_data = self.eval_data
-        ix_range = len(training_data) - tgt_block_size - pred_block_size
-        ix = torch.randint(ix_range, (batch_size,))
-        # ix = [5000]
-        x = torch.stack([ training_data[i:i+tgt_block_size+pred_block_size] for i in ix])
+        ix_start = tgt_block_size + pred_block_size
+        ix = torch.randint(ix_start, len(training_data), (batch_size,))
+        x = torch.stack([ training_data[i-tgt_block_size-pred_block_size:i] for i in ix])
         return x[:,:,:-6], x[:,:,-6:], ix
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
-        i = ix
-        x = self.train_data[i:i+tgt_block_size].unsqueeze(0)
+        x = self.train_data[ix-tgt_block_size-pred_block_size:ix].unsqueeze(0)
         return x[:,:,:-6], x[:,:,-6:]
 
     def getLatest(self, tgt_block_size: int):
