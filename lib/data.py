@@ -59,20 +59,21 @@ class DataFrame(object):
                 self.data = self.data.fillna(0)
             self.dataFlush()
         self.addTemporalData(self.data)
-        self.data = self.data[self.data.index >= '2024-08-22 11:08:00']
+        self.data = self.data.sort_index()
         self.data_frame = self.data
         self.data_option_label = None
         if self.is_option:
+            self.data = self.data.drop(columns=['Open', 'High', 'Low', 'Volume'])
+            self.data_frame = self.data
             self.data_option_label = self.data['Symbol'].to_list()
             tokenizer = Tokenizer(set(self.data_option_label))
             self.n_unique_ticker = tokenizer.size()
             self.data_option_label = torch.tensor(
                 [tokenizer.convert(l) for l in self.data_option_label])
-            self.data_option_label = self.data_option_label.to(device)
             self.data = self.data.drop('Symbol', axis=1)
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
-        self.data = torch.from_numpy(self.data).to(device)
+        self.data = torch.from_numpy(self.data)
         self.splitTrainingEval()
 
     def splitTrainingEval(self):
@@ -112,30 +113,26 @@ class DataFrame(object):
     """
     align option db and stock db
     """
-    def align(self, to, encoder_block_size:int = 8000):
-        del self.data
-        self.data = list()
-        data_option_label = list()
-        i = 0
-        for index, row in to.data_frame.iterrows():
-            print("Process ", index, end='\r')
-            buf = self.data_frame[self.data_frame.index <= index].iloc[
-                -encoder_block_size:].drop('Symbol', axis=1)
-            T, C = buf.shape
-            data = np.zeros((encoder_block_size, C), dtype=np.float32)
-            data[:T, :] = buf
-            self.data.append(data)
-            _, C = self.data_option_label.shape
-            label = np.zeros((encoder_block_size, C), dtype=np.int32)
-            self.data_option_label = self.data_option_label.to('cpu')
-            buf = self.data_option_label[i:i+T]
-            label[:len(buf)] = buf
-            i += 1
-            data_option_label.append(label)
-        self.data_option_label = torch.from_numpy(
-            np.array(data_option_label)).to(self.device)
-        self.data = torch.from_numpy(np.array(self.data)).to(self.device)
-        # set years to 2020 as default
+    def align(self, to, encoder_block_size:int = 5000):
+        # Pre-allocate data storage as PyTorch tensors directly on the target device
+        T_total = len(to.data_frame)  # Assuming the length of `to.data_frame`
+        self.data_frame = self.data_frame.drop(columns='Symbol')
+        _, C_data = self.data_frame.shape
+        _, C_label = self.data_option_label.shape
+        # Pre-allocated tensors
+        self.data = torch.zeros((
+            T_total, encoder_block_size, C_data), dtype=torch.float32)
+        data_option_label = torch.zeros((
+            T_total, encoder_block_size, C_label), dtype=torch.int32)
+        for i, (index, row) in enumerate(to.data_frame.iterrows()):
+            # print("Process ", index, end='\r')
+            buf = self.data_frame.loc[self.data_frame.index <= index,].iloc[-encoder_block_size:]
+            buf = np.ascontiguousarray(buf.values, dtype=np.float32)
+            T, _ = buf.shape
+            self.data[i, :T, :] = torch.from_numpy(buf)
+            label_buf = self.data_option_label[i:i+T]
+            data_option_label[i, :len(label_buf)] = label_buf
+        self.data_option_label = data_option_label
         years = self.data[:, :, -6]
         years = torch.where(years == 0, years + 2020, years)
         self.data[:, :, -6] = years
@@ -151,7 +148,7 @@ class DataFrame(object):
         x = torch.stack([ x[i] for i in seed ])
         y = torch.stack([ y[i] for i in seed ])
         z = torch.stack([ self.data_option_label[i] for i in seed ])
-        return x, y, z
+        return x.to(self.device), y.to(self.device), z.to(self.device)
 
 
     def getBatch(self, batch_size:int, tgt_block_size:int, pred_block_size:int, split='training'):
@@ -161,17 +158,20 @@ class DataFrame(object):
             training_data = self.eval_data
         ix_start = tgt_block_size + pred_block_size
         ix = torch.randint(ix_start, len(training_data), (batch_size,))
-        x = torch.stack([ training_data[i-tgt_block_size-pred_block_size:i] for i in ix])
+        x = torch.stack([ training_data[i-tgt_block_size-pred_block_size:i] for i in ix ])
+        x = x.to(self.device)
         return x[:,:,:-6], x[:,:,-6:], ix
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
         x = self.train_data[ix-tgt_block_size-pred_block_size:ix].unsqueeze(0)
+        x = x.to(self.device)
         return x[:,:,:-6], x[:,:,-6:]
 
     def getLatest(self, tgt_block_size: int):
         num_data = len(self.data)
         tgt_block_start = num_data - tgt_block_size
         x = self.data[tgt_block_start:].unsqueeze(0)
+        x = x.to(self.device)
         return x[:,:,:-6], x[:,:,-6:]
 
     def raw(self):
