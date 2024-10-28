@@ -153,7 +153,7 @@ def removeModulePrefidx(state_dict):
 
 @torch.no_grad()
 def generate(model, config,  index, index_mark, index_ticker,
-             target, target_mark, checkpoint_path=None, step=1):
+             target, target_mark, checkpoint_path=None, step=1, require_pad=True):
     checkpoint = None
     model.eval()
     print("Generating from path %s" %(checkpoint_path))
@@ -169,15 +169,19 @@ def generate(model, config,  index, index_mark, index_ticker,
     else:
         raise SystemError("No checkpoint available.")
     for _ in range(step):
-        buf = DataFrame.padOnes(config.n_predict_block_size, target)
-        buf_mark = DataFrame.genTimestamp(
-            target_mark[-1,-1], config.n_predict_block_size)
-        buf_mark = torch.concat(
-            (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
+        buf = target
+        buf_mark = target_mark
+        if require_pad:
+            buf = DataFrame.padOnes(config.n_predict_block_size, target)
+            buf_mark = DataFrame.genTimestamp(
+                target_mark[-1,-1], config.n_predict_block_size)
+            buf_mark = torch.concat(
+                (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
         pred = model.forward(index, index_mark, index_ticker, buf, buf_mark)
         target = target.to(pred.device)
-        target = torch.concatenate(
-            (target[:,:,_pred_start:_pred_end], pred[:,:,_pred_start:_pred_end]), dim=1)
+        target = torch.concatenate((
+            target[:,:-config.n_predict_block_size,_pred_start:_pred_end],
+            pred[:,:,_pred_start:_pred_end]), dim=1)
     return target
 
 def train_and_update(model, config, get_batch, epoch, eval_interval):

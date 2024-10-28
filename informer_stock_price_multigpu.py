@@ -45,10 +45,10 @@ config = Config(
     config = config,
     n_embed = 3000,
     n_encoder_head = 10,
-    n_encoder_layer = 1,
+    n_encoder_layer = 4,
     n_decoder_block_size = 1000,
     n_decoder_head = 10,
-    n_decoder_layer = 2,
+    n_decoder_layer = 4,
     n_predict_block_size = 200,
 )
 
@@ -79,11 +79,11 @@ _, _, config.n_decoder_features = y.shape
 _, config.n_encoder_block_size, config.n_encoder_features = x.shape
 config.n_unique_ticker = o_data.n_unique_ticker
 
-def predict(model, data, config, ix=0, step=1, checkpoint_path=None):
+def predict(model, data, config, ix=0, step=1, checkpoint_path=None, pad=True):
     x, x_mark, x_ticker, y, y_mark = data.getInputWithIx(
         config.n_decoder_block_size, config.n_predict_block_size, ix)
     predict = generate(model, config, x, x_mark, x_ticker, y, y_mark,
-        checkpoint_path=checkpoint_path, step=step)
+        checkpoint_path=checkpoint_path, step=step, require_pad=pad)
     return predict
 
 model = EncoderDecoderInformer(config)
@@ -95,9 +95,9 @@ if run_predict == 'y':
     criterion = torch.nn.MSELoss()
     raw, raw_mark = data.raw()
     pred = predict(model, data, config,
-        ix=ix, checkpoint_path=config.informerCheckpointPath())
+        ix=ix, checkpoint_path=config.informerCheckpointPath(), pad=False)
     plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
-    actual = raw[ix:ix + len(pred[0])]
+    actual = raw[ix-config.n_decoder_block_size-config.n_predict_block_size:ix]
     plt.plot(actual[:, 0].flatten().cpu().numpy(), label="Actual")
     plt.legend()
 
