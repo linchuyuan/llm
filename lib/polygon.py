@@ -46,7 +46,7 @@ def toFriday(date_obj):
     closest_friday = date_obj + timedelta(days=days_to_friday)
     return closest_friday
 
-def getOptionTickers(stock_ticker, duration=timedelta(days=30)):
+def getOptionTickers(stock_ticker, duration=timedelta(days=7)):
     api_key = getApiKey()
     now = datetime.now()
     start_date = toFriday(now - duration)
@@ -88,7 +88,7 @@ def getOptionTickers(stock_ticker, duration=timedelta(days=30)):
     
 def getStockHistory(symbol, api_key=None, start_date=None, duration=None):
     if duration is None:
-        duration = timedelta(days=90)
+        duration = timedelta(days=14)
     api_key = getApiKey(api_key)
     end_date = None
     if start_date is None:
@@ -125,7 +125,13 @@ def getStockHistory(symbol, api_key=None, start_date=None, duration=None):
 
         while url:
             # Make the API request
-            response = requests.get(url, params=params)
+            try:
+                response = requests.get(url, params=params)
+            except Exception as ex:
+                print(ex)
+                time.sleep(10)
+                continue
+
             data = response.json()
 
             # Extract the results (each result corresponds to a 2-minute bar)
