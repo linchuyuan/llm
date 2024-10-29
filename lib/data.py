@@ -57,12 +57,18 @@ class DataFrame(object):
                 # self.data = self.data[~self.data.index.duplicated(keep='last')]
                 self.data = self.data.drop_duplicates()
                 self.data = self.data.fillna(0)
+            if self.is_option:
+                # META option strike range change for other stock symbol
+                # TODO: make it configurable from the main script
+                self.data = self.data.loc[(self.data_frame['Strike'] > 550) &
+                    (self.data_frame['Strike'] <= 620)]
             self.dataFlush()
         self.addTemporalData(self.data)
         self.data = self.data.sort_index()
         self.data_frame = self.data
         self.data_option_label = None
         if self.is_option:
+            # drop some columns to save memory usage
             self.data = self.data.drop(columns=['Open', 'High', 'Low', 'Volume'])
             self.data_frame = self.data
             self.data_option_label = self.data['Symbol'].to_list()
@@ -114,8 +120,7 @@ class DataFrame(object):
     align option db and stock db
     """
     def align(self, to, encoder_block_size:int = 5000):
-        # Pre-allocate data storage as PyTorch tensors directly on the target device
-        T_total = len(to.data_frame)  # Assuming the length of `to.data_frame`
+        T_total = len(to.data_frame)
         self.data_frame = self.data_frame.drop(columns='Symbol')
         _, C_data = self.data_frame.shape
         _, C_label = self.data_option_label.shape
@@ -126,7 +131,8 @@ class DataFrame(object):
             T_total, encoder_block_size, C_label), dtype=torch.int32)
         for i, (index, row) in enumerate(to.data_frame.iterrows()):
             # print("Process ", index, end='\r')
-            buf = self.data_frame.loc[self.data_frame.index <= index,].iloc[-encoder_block_size:]
+            buf = self.data_frame.loc[
+                self.data_frame.index <= index,].iloc[-encoder_block_size:]
             buf = np.ascontiguousarray(buf.values, dtype=np.float32)
             T, _ = buf.shape
             self.data[i, :T, :] = torch.from_numpy(buf)
