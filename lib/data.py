@@ -60,16 +60,18 @@ class DataFrame(object):
             if self.is_option:
                 # META option strike range change for other stock symbol
                 # TODO: make it configurable from the main script
-                self.data = self.data.loc[(self.data_frame['Strike'] > 550) &
-                    (self.data_frame['Strike'] <= 620)]
+                self.data = self.data.loc[(self.data['Strike'] > 550) &
+                    (self.data['Strike'] <= 620)]
             self.dataFlush()
+        if self.is_option:
+            self.data = self.data.loc[self.data['Volume'] >= 10]
         self.addTemporalData(self.data)
         self.data = self.data.sort_index()
         self.data_frame = self.data
         self.data_option_label = None
         if self.is_option:
             # drop some columns to save memory usage
-            self.data = self.data.drop(columns=['Open', 'High', 'Low', 'Volume'])
+            # self.data = self.data.drop(columns=['Open', 'High', 'Low', 'Volume'])
             self.data_frame = self.data
             self.data_option_label = self.data['Symbol'].to_list()
             tokenizer = Tokenizer(set(self.data_option_label))

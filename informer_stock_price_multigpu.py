@@ -20,7 +20,6 @@ if not run_predict:
 predict_feature_ix = 0
 config = Config(
     tickers = [
-        "SMCI",
         "NVDA",
         "SPY",
         "AVGO",
@@ -38,17 +37,17 @@ config = Config(
     batch_size = 1,
     lr = 5e-4,
     epoch = 55001,
-    eval_interval = 1e2,
+    eval_interval = 5e1,
 )
 
 config = Config(
     config = config,
     n_embed = 3000,
     n_encoder_head = 10,
-    n_encoder_layer = 4,
+    n_encoder_layer = 2,
     n_decoder_block_size = 1000,
     n_decoder_head = 10,
-    n_decoder_layer = 4,
+    n_decoder_layer = 2,
     n_predict_block_size = 200,
 )
 
