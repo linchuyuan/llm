@@ -129,7 +129,7 @@ def getStockHistory(symbol, api_key=None, start_date=None, duration=None):
                 response = requests.get(url, params=params)
             except Exception as ex:
                 print(ex)
-                time.sleep(10)
+                t.sleep(10)
                 continue
 
             data = response.json()

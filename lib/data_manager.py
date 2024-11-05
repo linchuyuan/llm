@@ -12,6 +12,11 @@ class DataFrameManager(object):
                  tgt_block_size:int, pred_block_size:int, split='training'):
         target, target_mark, seed = self.stock_data_frame.getBatch(
             batch_size, tgt_block_size, pred_block_size, split)
+        if isinstance(seed, list):
+            for i in range(seed):
+                seed[i] = seed[i] - pred_block_size -1
+        else:
+            seed = seed - pred_block_size -1
         option_data, option_data_mark, ticker = self.option_data_frame.getOptionBatch(
             seed, split)
         return option_data, option_data_mark, ticker, target, target_mark

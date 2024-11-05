@@ -63,7 +63,7 @@ class DataFrame(object):
                 self.data = self.data.loc[self.data['Volume'] >= 10]
             self.dataFlush()
         if not self.is_option:
-            self.data = self.data.loc[self.data.index >= '2024-8-31 15:59:00']
+            self.data = self.data.loc[self.data.index >= '2024-9-13 15:59:00']
         self.addTemporalData(self.data)
         self.data = self.data.sort_index()
         self.data_frame = self.data
@@ -120,7 +120,7 @@ class DataFrame(object):
     """
     align option db and stock db
     """
-    def align(self, to, encoder_block_size:int =1000):
+    def align(self, to, encoder_block_size:int = 4100):
         T_total = len(to.data_frame)
         self.data_frame = self.data_frame.drop(columns='Symbol')
         _, C_data = self.data_frame.shape
