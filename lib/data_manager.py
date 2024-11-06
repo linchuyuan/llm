@@ -13,7 +13,7 @@ class DataFrameManager(object):
         target, target_mark, seed = self.stock_data_frame.getBatch(
             batch_size, tgt_block_size, pred_block_size, split)
         if isinstance(seed, list):
-            for i in range(seed):
+            for i in range(len(seed)):
                 seed[i] = seed[i] - pred_block_size -1
         else:
             seed = seed - pred_block_size -1
@@ -22,7 +22,8 @@ class DataFrameManager(object):
         return option_data, option_data_mark, ticker, target, target_mark
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
-        option_data, option_data_mark, ticker = self.option_data_frame.getOptionBatch([ix])
+        option_data, option_data_mark, ticker = self.option_data_frame.getOptionBatch([
+            ix-pred_block_size-1], split="training")
         target, target_mark = self.stock_data_frame.getInputWithIx(
             tgt_block_size, pred_block_size, ix)
         return option_data, option_data_mark, ticker, target, target_mark

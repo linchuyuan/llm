@@ -90,6 +90,9 @@ class DataFrame(object):
         print("training shape is ", self.train_data.shape)
         self.eval_data = self.data[:n]
         print("eval shape is ", self.eval_data.shape)
+        if self.is_option:
+            self.train_data_option_label = self.data_option_label[n:]
+            self.eval_data_option_label = self.data_option_label[:n]
 
     @property
     def db(self):
@@ -148,13 +151,15 @@ class DataFrame(object):
     def getOptionBatch(self, seed:list, split='training'):
         if split == "training":
             training_data = self.train_data
+            data_option_label = self.train_data_option_label
         else:
             training_data = self.eval_data
+            data_option_label = self.eval_data_option_label
         x = training_data[:,:,:-6]
         y = training_data[:,:,-6:]
         x = torch.stack([ x[i] for i in seed ])
         y = torch.stack([ y[i] for i in seed ])
-        z = torch.stack([ self.data_option_label[i] for i in seed ])
+        z = torch.stack([ data_option_label[i] for i in seed ])
         return x.to(self.device), y.to(self.device), z.to(self.device)
 
 
