@@ -3,7 +3,7 @@
 import torch
 FORCE_CPU = False
 
-dropout = 0.05
+dropout = 0.1
 
 class Config(object):
 
