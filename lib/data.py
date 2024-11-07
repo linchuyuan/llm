@@ -81,18 +81,6 @@ class DataFrame(object):
         self.data = self.data.to_numpy()
         self.data = self.data.astype(np.float32)
         self.data = torch.from_numpy(self.data)
-        self.splitTrainingEval()
-
-    def splitTrainingEval(self):
-        print("data shape is ", self.data.shape)
-        n = int(0.2 * len(self.data))
-        self.train_data = self.data[n:]
-        print("training shape is ", self.train_data.shape)
-        self.eval_data = self.data[:n]
-        print("eval shape is ", self.eval_data.shape)
-        if self.is_option:
-            self.train_data_option_label = self.data_option_label[n:]
-            self.eval_data_option_label = self.data_option_label[:n]
 
     @property
     def db(self):
@@ -146,36 +134,23 @@ class DataFrame(object):
         years = self.data[:, :, -6]
         years = torch.where(years == 0, years + 2020, years)
         self.data[:, :, -6] = years
-        self.splitTrainingEval()
 
-    def getOptionBatch(self, seed:list, split='training'):
-        if split == "training":
-            training_data = self.train_data
-            data_option_label = self.train_data_option_label
-        else:
-            training_data = self.eval_data
-            data_option_label = self.eval_data_option_label
-        x = training_data[:,:,:-6]
-        y = training_data[:,:,-6:]
+    def getOptionBatch(self, seed:list):
+        x = self.data[:,:,:-6]
+        y = self.data[:,:,-6:]
         x = torch.stack([ x[i] for i in seed ])
         y = torch.stack([ y[i] for i in seed ])
-        z = torch.stack([ data_option_label[i] for i in seed ])
+        z = torch.stack([ self.data_option_label[i] for i in seed ])
         return x.to(self.device), y.to(self.device), z.to(self.device)
 
 
-    def getBatch(self, batch_size:int, tgt_block_size:int, pred_block_size:int, split='training'):
-        if split == "training":
-            training_data = self.train_data
-        else:
-            training_data = self.eval_data
-        ix_start = tgt_block_size + pred_block_size
-        ix = torch.randint(ix_start, len(training_data), (batch_size,))
-        x = torch.stack([ training_data[i-tgt_block_size-pred_block_size:i] for i in ix ])
+    def getBatch(self, batch_size:int, tgt_block_size:int, pred_block_size:int, ix:list):
+        x = torch.stack([ self.data[i-tgt_block_size-pred_block_size:i] for i in ix ])
         x = x.to(self.device)
-        return x[:,:,:-6], x[:,:,-6:], ix
+        return x[:,:,:-6], x[:,:,-6:]
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
-        x = self.train_data[ix-tgt_block_size-pred_block_size:ix].unsqueeze(0)
+        x = self.data[ix-tgt_block_size-pred_block_size:ix].unsqueeze(0)
         x = x.to(self.device)
         return x[:,:,:-6], x[:,:,-6:]
 
@@ -187,7 +162,7 @@ class DataFrame(object):
         return x[:,:,:-6], x[:,:,-6:]
 
     def raw(self):
-        return self.train_data[:,:-6], self.train_data[:,-6:]
+        return self.data[:,:-6], self.data[:,-6:]
 
     @staticmethod
     def genTimestamp(start, periods):
