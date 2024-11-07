@@ -22,6 +22,8 @@ class DataFrameManager(object):
         n = int(0.2 * len(self.seed))
         self.train_seed = self.seed[n:]
         self.eval_seed = self.seed[:n]
+        if len(list(set(self.train_seed) & set(self.eval_seed))):
+            raise ValueError("Training and eval set overlapped")
         print("train data size is ", len(self.train_seed))
         print("eval data size is ", len(self.eval_seed))
 
