@@ -6,7 +6,7 @@ import torch
 import pdb
 import os
 from lib.data import DataFrame
-from lib.polygon import getOptionTickers
+from lib.polygon import getOptionTickers, parseOptionTicker
 from lib.data_manager import DataFrameManager
 from lib.config import Config
 from model.encoder_decoder_informer import \
@@ -38,23 +38,35 @@ config = Config(
     lr = 5e-4,
     epoch = 55001,
     eval_interval = 5e1,
+    option_low = 500,
+    option_high = 700,
 )
 
 config = Config(
     config = config,
-    n_embed = 3000,
+    n_embed = 4000,
     n_encoder_head = 10,
     n_encoder_layer = 2,
     n_decoder_block_size = 1000,
     n_decoder_head = 10,
-    n_decoder_layer = 2,
+    n_decoder_layer = 1,
     n_predict_block_size = 200,
 )
 
+option_tickers = getOptionTickers('META')
+filtered_option_ticker = list()
+if option_tickers:
+    for ticker in option_tickers:
+        _, _, _, strike = parseOptionTicker(ticker)
+        if strike >= config.option_low and strike <= config.option_high:
+            filtered_option_ticker.append(ticker)
+    print("Option size is ", len(filtered_option_ticker))
+
 o_config = Config(
     config = config,
-    tickers = getOptionTickers('META')
+    tickers = filtered_option_ticker,
 )
+
 o_data = DataFrame(
     o_config.tickers,
     config.cuda0,
@@ -68,12 +80,16 @@ s_data = DataFrame(
     db_file="db.pickle",
 )
 
-data = DataFrameManager(s_data, o_data)
+data = DataFrameManager(
+    s_data, o_data, config.n_decoder_block_size,
+    config.n_predict_block_size)
+
 x, x_mark, x_ticker, y, y_mark = data.getBatch(
     config.batch_size,
     src_block_size=0,
     tgt_block_size=config.n_decoder_block_size,
     pred_block_size=config.n_predict_block_size)
+
 _, _, config.n_decoder_features = y.shape
 _, config.n_encoder_block_size, config.n_encoder_features = x.shape
 config.n_unique_ticker = o_data.n_unique_ticker

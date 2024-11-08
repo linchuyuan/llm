@@ -17,7 +17,7 @@ import re
 # start_date = end_date - timedelta(days=360)
 
 def parseOptionTicker(symbol):
-    match = re.match(r"([A-Z]+)(\d{6})([CP])(\d{8})", symbol)
+    match = re.match(r"([A-Z,:]+)(\d{6})([CP])(\d{8})", symbol)
     if match:
         sym = match.group(1)
         exp = match.group(2)

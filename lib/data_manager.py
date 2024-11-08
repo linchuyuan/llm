@@ -44,7 +44,7 @@ class DataFrameManager(object):
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
         option_data, option_data_mark, ticker = self.option_data_frame.getOptionBatch([
-            ix-pred_block_size-1], split="training")
+            ix-pred_block_size-1])
         target, target_mark = self.stock_data_frame.getInputWithIx(
             tgt_block_size, pred_block_size, ix)
         return option_data, option_data_mark, ticker, target, target_mark
