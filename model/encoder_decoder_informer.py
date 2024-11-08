@@ -208,6 +208,7 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
                 torch.cuda.empty_cache()
         except:
             print("Unable to restore from previous checkpoint, restaring...")
+            raise
     else:
         print("Clean run starts %s " % checkpoint_path)
     print("starting")
