@@ -59,6 +59,8 @@ class EncoderDecoderInformer(torch.nn.Module):
             config.n_embed, config.n_decoder_head,
             config.n_decoder_block_size + config.n_predict_block_size)
             for _ in range(config.n_decoder_layer)]).to(self.config.cuda1)
+        self.self_full_attention_decoder = DecoderBlock(config.n_embed, config.n_decoder_head,
+            config.n_decoder_block_size + config.n_predict_block_size).to(self.config.cuda1)
 
 
         # final mapping
@@ -116,11 +118,14 @@ class EncoderDecoderInformer(torch.nn.Module):
         decoder_out, _ = self.decoder_blocks(
             (decoder_logits, memory.to(decoder_logits.device)))
 
+        decoder_out, _ = self.self_full_attention_decoder((decoder_out, decoder_out))
+
         # final mapping
         logits = self.final_linear1(decoder_out)
         # logits = self.final_block1(logits)
         # logits = self.final_linear2(logits)
-        return logits[:,-self.config.n_predict_block_size:, :]
+        # return logits[:,-self.config.n_predict_block_size:, :]
+        return logits
 
 @torch.no_grad()
 def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
@@ -136,9 +141,9 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
                 split)
             logits = model.forward(x, x_mark, x_ticker, y, y_mark)
             y = y.to(logits.device)
-            loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
-                y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
-            # loss = criterion(logits, y)
+            # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
+            #    y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
+            loss = criterion(logits[:,:,_pred_start:_pred_end], y[:,:,_pred_start:_pred_end])
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
@@ -178,6 +183,7 @@ def generate(model, config,  index, index_mark, index_ticker,
             buf_mark = torch.concat(
                 (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
         pred = model.forward(index, index_mark, index_ticker, buf, buf_mark)
+        pred = pred[:,-config.n_predict_block_size:]
         target = target.to(pred.device)
         target = torch.concatenate((
             target[:,:-config.n_predict_block_size,_pred_start:_pred_end],
@@ -229,8 +235,9 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_predict_block_size)
         logits = model.forward(x, x_mark, x_ticker, y, y_mark)
         y = y.to(logits.device)
-        loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
-            y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
+        # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
+        #     y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
+        loss = criterion(logits[:,:,_pred_start:_pred_end], y[:,:,_pred_start:_pred_end])
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
         optimizer.zero_grad(set_to_none=True)

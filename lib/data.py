@@ -60,10 +60,11 @@ class DataFrame(object):
             if self.is_option:
                 # META option strike range change for other stock symbol
                 # TODO: make it configurable from the main script
-                self.data = self.data.loc[self.data['Volume'] >= 10]
+                # self.data = self.data.loc[self.data['Volume'] >= 10]
+                pass
             self.dataFlush()
-        if not self.is_option:
-            self.data = self.data.loc[self.data.index >= '2024-9-13 15:59:00']
+        # if not self.is_option:
+        #     self.data = self.data.loc[self.data.index >= '2024-9-13 15:59:00']
         self.addTemporalData(self.data)
         self.data = self.data.sort_index()
         self.data_frame = self.data
@@ -111,7 +112,7 @@ class DataFrame(object):
     """
     align option db and stock db
     """
-    def align(self, to, encoder_block_size:int = 4100):
+    def align(self, to, encoder_block_size:int = 5000):
         T_total = len(to.data_frame)
         self.data_frame = self.data_frame.drop(columns='Symbol')
         _, C_data = self.data_frame.shape
