@@ -14,32 +14,28 @@ class DataFrameManager(object):
 
     def splitTrainingEval(self, tgt_block_size, pred_block_size):
         T, C = self.stock_data_frame.data.shape
-        self.seed = [i for i in range(T)]
-        self.seed = self.seed[(tgt_block_size + pred_block_size):]
-        random.seed(1)
-        random.shuffle(self.seed)
-        random.seed(None)
-        n = int(0.2 * len(self.seed))
-        self.train_seed = self.seed[n:]
-        self.eval_seed = self.seed[:n]
-        if len(list(set(self.train_seed) & set(self.eval_seed))):
+        self.ix = [i for i in range(T)]
+        self.ix = self.ix[(tgt_block_size + pred_block_size):]
+        self.train_ix = self.ix[::5]
+        self.eval_ix = [item for i, item in enumerate(self.ix) if i % 5 != 0]
+        if len(list(set(self.train_ix) & set(self.eval_ix))):
             raise ValueError("Training and eval set overlapped")
-        print("train data size is ", len(self.train_seed))
-        print("eval data size is ", len(self.eval_seed))
+        print("train data size is ", len(self.train_ix))
+        print("eval data size is ", len(self.eval_ix))
 
     def getBatch(self, batch_size:int, src_block_size:int,
                  tgt_block_size:int, pred_block_size:int, split='training'):
         if split == 'training':
-            seed = self.train_seed
+            ix = self.train_ix
         else:
-            seed = self.eval_seed
-        seed = random.sample(seed, batch_size)
+            ix = self.eval_ix
+        ix = random.sample(ix, batch_size)
         target, target_mark = self.stock_data_frame.getBatch(
-            batch_size, tgt_block_size, pred_block_size, seed)
-        for i in range(len(seed)):
-            seed[i] = seed[i] - pred_block_size -1
+            batch_size, tgt_block_size, pred_block_size, ix)
+        for i in range(len(ix)):
+            ix[i] = ix[i] - pred_block_size -1
         option_data, option_data_mark, ticker = \
-            self.option_data_frame.getOptionBatch(seed)
+            self.option_data_frame.getOptionBatch(ix)
         return option_data, option_data_mark, ticker, target, target_mark
 
     def getInputWithIx(self, tgt_block_size:int, pred_block_size:int, ix:int):
