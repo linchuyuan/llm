@@ -112,7 +112,7 @@ class DataFrame(object):
     """
     align option db and stock db
     """
-    def align(self, to, encoder_block_size:int = 5000):
+    def align(self, to, encoder_block_size:int = 10000):
         T_total = len(to.data_frame)
         self.data_frame = self.data_frame.drop(columns='Symbol')
         _, C_data = self.data_frame.shape

@@ -25,11 +25,12 @@ class DecoderBlock(torch.nn.Module):
     def forward(self, args: tuple):
         index, memory = args[0], args[1]
         index_norm = self.ln1(index)
-        index = index + self.attention_masked(
-                index_norm, index_norm)
+        index = index + self.attention_masked(index_norm, index_norm)
+
         index_norm = self.ln2(index)
         memory_norm = self.ln_memory(memory)
-        index = index + self.attention_unmasked(
-                index_norm, memory)
+        index = index + self.attention_unmasked(index_norm, memory_norm)
+
         index = index + self.ffwd(self.ln3(index))
+
         return (index, memory)

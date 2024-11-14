@@ -92,39 +92,43 @@ class EncoderDecoderInformer(torch.nn.Module):
                 torch.nn.init.zeros_(module.bias)
 
     def forward(self, index, index_mark, index_ticker, targets, targets_mark):
-        # B, T
+        # Get shapes
         B, T, C = index.shape
 
-        # encoder
+        # Encoder
         index = self.encoder_linear(index)
         index = self.encoder_ln(index)
         encoder_logits = self.encoder_embedding(index)
         encoder_logits = self.encoder_position_embedding_table(encoder_logits)
         encoder_logits += self.encoder_temporal_embedding(index_mark)
-        encoder_logits += self.encoder_ticker_embedding(index_ticker)[:,:,0]
+        encoder_logits += self.encoder_ticker_embedding(index_ticker)[:, :, 0]
+
+        # Run encoder blocks
         memory = self.encoder_blocks(encoder_logits)
 
-        # decoder
-        decoder_in = targets.clone().detach()
-        decoder_in[:,-self.config.n_predict_block_size:,:] = 0
-        decoder_in = decoder_in.to(self.decoder_linear.weight.device)
-        targets_mark = targets_mark.to(decoder_in.device)
-        decoder_in = self.decoder_linear(decoder_in)
-        decoder_in = self.decoder_ln(decoder_in)
-        decoder_logits = self.decoder_embedding(decoder_in)
-        decoder_logits = self.decoder_position_embedding_table(decoder_logits)
-        decoder_logits = decoder_logits + self.decoder_temporal_embedding(targets_mark)
+        # Decoder
+        targets[:, -self.config.n_predict_block_size:, :] = 0
+        targets = targets.to(self.decoder_linear.weight.device)
+        targets_mark = targets_mark.to(targets.device)
+        targets = self.decoder_linear(targets)
+        targets = self.decoder_ln(targets)
 
-        decoder_out, _ = self.decoder_blocks(
-            (decoder_logits, memory.to(decoder_logits.device)))
+        # Embeddings in the decoder
+        logits = self.decoder_embedding(targets)
+        logits = self.decoder_position_embedding_table(logits)
+        logits += self.decoder_temporal_embedding(targets_mark)
 
-        decoder_out, _ = self.self_full_attention_decoder((decoder_out, decoder_out))
+        # Decoder blocks
+        logits, _ = self.decoder_blocks(
+            (logits, memory.to(logits.device))
+        )
 
-        # final mapping
-        logits = self.final_linear1(decoder_out)
-        # logits = self.final_block1(logits)
-        # logits = self.final_linear2(logits)
-        # return logits[:,-self.config.n_predict_block_size:, :]
+        # Self-attention applied to decoder output
+        logits, _ = self.self_full_attention_decoder((logits, logits))
+
+        # Final linear mapping for predictions
+        logits = self.final_linear1(logits)
+
         return logits
 
 @torch.no_grad()
@@ -139,11 +143,12 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
                 config.n_decoder_block_size,
                 config.n_predict_block_size,
                 split)
+            label = y.clone().detach()
             logits = model.forward(x, x_mark, x_ticker, y, y_mark)
-            y = y.to(logits.device)
+            label = label.to(logits.device)
             # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
             #    y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
-            loss = criterion(logits[:,:,_pred_start:_pred_end], y[:,:,_pred_start:_pred_end])
+            loss = criterion(logits[:,:,_pred_start:_pred_end], label[:,:,_pred_start:_pred_end])
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
@@ -233,11 +238,12 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
             config.n_encoder_block_size,
             config.n_decoder_block_size,
             config.n_predict_block_size)
+        label = y.clone().detach()
         logits = model.forward(x, x_mark, x_ticker, y, y_mark)
-        y = y.to(logits.device)
+        label = label.to(logits.device)
         # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
         #     y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
-        loss = criterion(logits[:,:,_pred_start:_pred_end], y[:,:,_pred_start:_pred_end])
+        loss = criterion(logits[:,:,_pred_start:_pred_end], label[:,:,_pred_start:_pred_end])
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
         optimizer.zero_grad(set_to_none=True)
