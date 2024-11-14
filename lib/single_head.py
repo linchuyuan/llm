@@ -23,7 +23,7 @@ class Head(torch.nn.Module):
         if memory is None:
             memory = index
         B, T, _ = index.shape
-        self.top_k = max(int(self.top_k_ratio * T), 1) if self.training else min(self.top_k, T)  # Dynamic top-K
+        self.top_k = int(self.top_k_ratio * T)
 
         # Linear projections
         q = self.q(index)  # [B, T, head_size]
