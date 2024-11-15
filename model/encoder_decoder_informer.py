@@ -179,7 +179,7 @@ def generate(model, config,  index, index_mark, index_ticker,
     else:
         raise SystemError("No checkpoint available.")
     for _ in range(step):
-        buf = target
+        buf = target.clone().detach()
         buf_mark = target_mark
         if require_pad:
             buf = DataFrame.padOnes(config.n_predict_block_size, target)
@@ -189,9 +189,9 @@ def generate(model, config,  index, index_mark, index_ticker,
                 (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
         pred = model.forward(index, index_mark, index_ticker, buf, buf_mark)
         pred = pred[:,-config.n_predict_block_size:]
-        target = target.to(pred.device)
+        buf = buf.to(pred.device)
         target = torch.concatenate((
-            target[:,:-config.n_predict_block_size,_pred_start:_pred_end],
+            buf[:,:-config.n_predict_block_size,_pred_start:_pred_end],
             pred[:,:,_pred_start:_pred_end]), dim=1)
     return target
 
