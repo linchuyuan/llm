@@ -59,8 +59,8 @@ class EncoderDecoderInformer(torch.nn.Module):
             config.n_embed, config.n_decoder_head,
             config.n_decoder_block_size + config.n_predict_block_size)
             for _ in range(config.n_decoder_layer)]).to(self.config.cuda1)
-        self.self_full_attention_decoder = DecoderBlock(config.n_embed, config.n_decoder_head,
-            config.n_decoder_block_size + config.n_predict_block_size).to(self.config.cuda1)
+        # self.self_full_attention_decoder = DecoderBlock(config.n_embed, config.n_decoder_head,
+        #    config.n_decoder_block_size + config.n_predict_block_size).to(self.config.cuda1)
 
 
         # final mapping
@@ -124,7 +124,7 @@ class EncoderDecoderInformer(torch.nn.Module):
         )
 
         # Self-attention applied to decoder output
-        logits, _ = self.self_full_attention_decoder((logits, logits))
+        # logits, _ = self.self_full_attention_decoder((logits, logits))
 
         # Final linear mapping for predictions
         logits = self.final_linear1(logits)

@@ -12,7 +12,7 @@ class DecoderBlock(torch.nn.Module):
         super().__init__()
         head_size = n_embed // n_head
         self.attention_masked = MultiHeadAttention(
-            n_head, n_embed, head_size, block_size, masked=True)
+            n_head, n_embed, head_size, block_size, masked=True, top_k_ratio=1)
         self.attention_unmasked = MultiHeadAttention(
             n_head, n_embed, head_size, block_size, masked=False)
         self.ffwd = FeedForward(n_embed)

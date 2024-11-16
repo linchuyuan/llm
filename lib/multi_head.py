@@ -6,10 +6,10 @@ from lib.single_head import Head
 from lib.config import dropout
 
 class MultiHeadAttention(torch.nn.Module):
-    def __init__(self, n_head, n_embed, head_size, block_size, masked):
+    def __init__(self, n_head, n_embed, head_size, block_size, masked, top_k_ratio=0.1):
         super().__init__()
         self.heads = torch.nn.ModuleList([
-            Head(head_size, n_embed, block_size, masked) for _ in range(n_head) ])
+            Head(head_size, n_embed, block_size, masked, top_k_ratio) for _ in range(n_head) ])
         self.proj = torch.nn.Linear(head_size * n_head, n_embed)
         self.dropout = torch.nn.Dropout(dropout)
 
