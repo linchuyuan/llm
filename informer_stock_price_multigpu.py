@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 import yfinance as yf
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import pdb
@@ -44,12 +43,12 @@ config = Config(
 
 config = Config(
     config = config,
-    n_embed = 4000,
+    n_embed = 2800,
     n_encoder_head = 10,
     n_encoder_layer = 2,
-    n_decoder_block_size = 1000,
+    n_decoder_block_size = 2000,
     n_decoder_head = 10,
-    n_decoder_layer = 1,
+    n_decoder_layer = 2,
     n_predict_block_size = 200,
 )
 
@@ -111,24 +110,27 @@ if run_predict == 'y':
     raw, raw_mark = data.raw()
     pred = predict(model, data, config,
         ix=ix, checkpoint_path=config.informerCheckpointPath(), pad=False)
-    plt.plot(pred[0,:,predict_feature_ix].flatten().cpu().numpy(), label="Predicted_%s" % (ix))
-    actual = raw[ix-config.n_decoder_block_size-config.n_predict_block_size:ix]
-    plt.plot(actual[:, 0].flatten().cpu().numpy(), label="Actual")
-    plt.legend()
+    label = raw[ix-config.n_decoder_block_size-config.n_predict_block_size:ix]
 
-    loss = criterion(
-        pred[:,-config.n_predict_block_size:,0:1].flatten().to(config.cuda0),
-        actual[-config.n_predict_block_size:,0:1].flatten().to(config.cuda0))
+    T,C = label.shape
+    label = label[-config.n_predict_block_size:,0].view(
+        1, config.n_predict_block_size)
+    max_values, _ = torch.max(label, dim=1)  # Shape [B]
+    min_values, _ = torch.min(label, dim=1)  # Shape [B]
+    label = torch.stack((max_values, min_values), dim=1)
+    label = label.to(pred.device)
+    # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
+    #    y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
+    loss = criterion(pred, label)
     print("Predict loss is ", loss.item())
-    plt.show()
+    print("Label is ", label)
+    print("Predict is ", pred)
 elif run_predict == 'p':
     x, x_mark, x_ticker, y, y_mark = data.getLatest(
         config.n_decoder_block_size)
     predict = generate(model, config, x, x_mark, x_ticker, y, y_mark, 
         checkpoint_path=config.informerCheckpointPath())
-    predict = predict.cpu()
-    plt.plot(predict[0, :, predict_feature_ix].flatten().numpy())
-    plt.legend()
-    plt.show()
+    print(predict)
+    raise
 else:
     train_and_update(model, config, data.getBatch, config.epoch, config.eval_interval)
