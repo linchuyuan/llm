@@ -4,6 +4,7 @@ import numpy as np
 import torch
 import pdb
 import os
+import datetime
 from lib.data import DataFrame
 from lib.polygon import getOptionTickers, parseOptionTicker
 from lib.data_manager import DataFrameManager
@@ -96,6 +97,12 @@ _, _, config.n_decoder_features = y.shape
 _, config.n_encoder_block_size, config.n_encoder_features = x.shape
 config.n_unique_ticker = o_data.n_unique_ticker
 
+def toDatetime(date_tensor):
+    year, month, _, day, hour, minute  = date_tensor
+    return datetime.datetime(int(year), int(month), int(day),
+        int(hour), int(minute))
+
+
 def predict(model, data, config, ix=0, step=1, checkpoint_path=None, pad=True):
     x, x_mark, x_ticker, y, y_mark = data.getInputWithIx(
         config.n_decoder_block_size, config.n_predict_block_size, ix)
@@ -111,10 +118,12 @@ if run_predict == 'y':
     ix = int(input("Enter idx: "))
     criterion = torch.nn.MSELoss()
     raw, raw_mark = data.raw()
-    pred = predict(model, data, config,
+    pred, mark = predict(model, data, config,
         ix=ix, checkpoint_path=config.informerCheckpointPath(), pad=False)
+    mark = mark.reshape(-1, mark.shape[-1])
+    start = toDatetime(mark[0])
+    end = toDatetime(mark[-1])
     label = raw[ix-config.n_decoder_block_size-config.n_predict_block_size:ix]
-
     T,C = label.shape
     label = label[-config.n_predict_block_size:,0].view(
         1, config.n_predict_block_size)
@@ -122,17 +131,22 @@ if run_predict == 'y':
     min_values, _ = torch.min(label, dim=1)  # Shape [B]
     label = torch.stack((max_values, min_values), dim=1)
     label = label.to(pred.device)
-    # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
-    #    y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
     loss = criterion(pred, label)
+    pdb.set_trace()
+    print("%s to %s" %(start.strftime("%B %d %Y %H:%M"),
+        end.strftime("%B %d %Y %H:%M")))
     print("Predict loss is ", loss.item())
     print("Label is ", label)
     print("Predict is ", pred)
 elif run_predict == 'p':
     x, x_mark, x_ticker, y, y_mark = data.getLatest(
         config.n_decoder_block_size)
-    predict = generate(model, config, x, x_mark, x_ticker, y, y_mark, 
+    predict, mark = generate(model, config, x, x_mark, x_ticker, y, y_mark, 
         checkpoint_path=config.informerCheckpointPath())
-    print(predict)
+    start = toDatetime(mark[0])
+    end = toDatetime(mark[-1])
+    print("from %s to %s projected to be: %s" %(
+        start.strftime("%B %d %Y %H:%M"),
+        end.strftime("%B %d %Y %H:%M"), predict))
 else:
     train_and_update(model, config, data.getBatch, config.epoch, config.eval_interval)

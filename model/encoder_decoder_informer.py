@@ -184,23 +184,16 @@ def generate(model, config,  index, index_mark, index_ticker,
         model.load_state_dict(state_dict)
     else:
         raise SystemError("No checkpoint available.")
-    for _ in range(step):
-        buf = target.clone().detach()
-        buf_mark = target_mark
-        if require_pad:
-            buf = DataFrame.padOnes(config.n_predict_block_size, target)
-            buf_mark = DataFrame.genTimestamp(
-                target_mark[-1,-1], config.n_predict_block_size)
-            buf_mark = torch.concat(
-                (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
-        pred = model.forward(index, index_mark, index_ticker, buf, buf_mark)
-        return pred
-        pred = pred[:,-config.n_predict_block_size:]
-        buf = buf.to(pred.device)
-        target = torch.concatenate((
-            buf[:,:-config.n_predict_block_size,_pred_start:_pred_end],
-            pred[:,:,_pred_start:_pred_end]), dim=1)
-    return target
+    buf = target.clone().detach()
+    buf_mark = target_mark
+    if require_pad:
+        buf = DataFrame.padOnes(config.n_predict_block_size, target)
+        buf_mark = DataFrame.genTimestamp(
+            target_mark[-1,-1], config.n_predict_block_size)
+        buf_mark = torch.concat(
+            (target_mark, buf_mark.to(target_mark.device)), dim=1).long()
+    pred = model.forward(index, index_mark, index_ticker, buf, buf_mark)
+    return pred, buf_mark
 
 def train_and_update(model, config, get_batch, epoch, eval_interval):
     start_time = time.time()
