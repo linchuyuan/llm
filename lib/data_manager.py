@@ -16,8 +16,8 @@ class DataFrameManager(object):
         T, C = self.stock_data_frame.data.shape
         self.ix = [i for i in range(T)]
         self.ix = self.ix[(tgt_block_size + pred_block_size):]
-        self.train_ix = self.ix[::5]
-        self.eval_ix = [item for i, item in enumerate(self.ix) if i % 5 != 0]
+        self.eval_ix = self.ix[::5]
+        self.train_ix = [item for i, item in enumerate(self.ix) if i % 5 != 0]
         if len(list(set(self.train_ix) & set(self.eval_ix))):
             raise ValueError("Training and eval set overlapped")
         print("train data size is ", len(self.train_ix))
