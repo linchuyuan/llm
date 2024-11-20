@@ -31,6 +31,7 @@ class DataFrame(object):
         self.device = device
         self.data = None
         self.n_unique_ticker = None
+        self.ticker_list = ticker_list
         if 'update_db' in os.environ:
             for ticker in ticker_list:
                 hist = getStockHistory(ticker)
@@ -67,6 +68,7 @@ class DataFrame(object):
         #     self.data = self.data.loc[self.data.index >= '2024-9-13 15:59:00']
         self.addTemporalData(self.data)
         self.data = self.data.sort_index()
+        self.alignTickerOrder()
         self.data_frame = self.data
         self.data_option_label = None
         if self.is_option:
@@ -108,6 +110,18 @@ class DataFrame(object):
             print("Stock outside of trading hours")
             return False
         return True
+
+    def alignTickerOrder(self):
+        if self.is_option:
+            return
+        ordered_columns = list()
+        for ticker in self.ticker_list:
+            for col in self.data.columns:
+                if col.startswith(ticker):
+                    ordered_columns.append(col)
+        ordered_columns.extend(['year', 'month',
+            'weekday', 'day', 'hour', 'minute'])
+        self.data = self.data[ordered_columns]
 
     """
     align option db and stock db

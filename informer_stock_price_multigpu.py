@@ -19,40 +19,42 @@ if not run_predict:
 predict_feature_ix = 0
 config = Config(
     tickers = [
+        "GOOG",
         "NVDA",
         "SPY",
-        "AVGO",
-        "NVDU",
-        "SOXL",
         "UVIX",
         "QQQ",
         "TQQQ",
-        "TSLA",
         "MSFT",
-        "GOOGL",
         "META",
-        "SNAP",
+#        "AVGO",
+#        "NVDU",
+#        "SOXL",
+#        "TSLA",
+#        "GOOGL",
+#        "SNAP",
+
     ],
     batch_size = 1,
     lr = 5e-4,
     epoch = 55001,
     eval_interval = 5e1,
-    option_low = 500,
-    option_high = 700,
+    option_low = 80,
+    option_high = 220,
 )
 
 config = Config(
     config = config,
     n_embed = 2800,
     n_encoder_head = 10,
-    n_encoder_layer = 2,
+    n_encoder_layer = 3,
     n_decoder_block_size = 2000,
     n_decoder_head = 10,
     n_decoder_layer = 2,
     n_predict_block_size = 200,
 )
 
-option_tickers = getOptionTickers('META')
+option_tickers = getOptionTickers('GOOG')
 filtered_option_ticker = list()
 if option_tickers:
     for ticker in option_tickers:
@@ -72,6 +74,7 @@ o_data = DataFrame(
     is_option=True,
     db_file="option_db.pickle",
 )
+
 s_data = DataFrame(
     config.tickers,
     config.cuda0,
@@ -131,6 +134,5 @@ elif run_predict == 'p':
     predict = generate(model, config, x, x_mark, x_ticker, y, y_mark, 
         checkpoint_path=config.informerCheckpointPath())
     print(predict)
-    raise
 else:
     train_and_update(model, config, data.getBatch, config.epoch, config.eval_interval)
