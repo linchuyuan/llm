@@ -33,6 +33,9 @@ class Config(object):
         return "cpu"
 
     def cuda(self, idx: int):
+        if idx == 1:
+            return "cuda:0"
+        return "cuda:1"
         cuda_device_count = torch.cuda.device_count()
         if cuda_device_count == 0 or FORCE_CPU:
             return "cpu"

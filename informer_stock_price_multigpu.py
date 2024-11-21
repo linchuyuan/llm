@@ -46,13 +46,13 @@ config = Config(
 
 config = Config(
     config = config,
-    n_embed = 2800,
+    n_embed = 2500,
     n_encoder_head = 10,
     n_encoder_layer = 3,
-    n_decoder_block_size = 2000,
+    n_decoder_block_size = 4000,
     n_decoder_head = 10,
-    n_decoder_layer = 2,
-    n_predict_block_size = 200,
+    n_decoder_layer = 1,
+    n_predict_block_size = 2000,
 )
 
 option_tickers = getOptionTickers('GOOG')
@@ -120,7 +120,7 @@ if run_predict == 'y':
     raw, raw_mark = data.raw()
     pred, mark = predict(model, data, config,
         ix=ix, checkpoint_path=config.informerCheckpointPath(), pad=False)
-    mark = mark.reshape(-1, mark.shape[-1])
+    mark = mark.reshape(-1, mark.shape[-1])[-config.n_predict_block_size:]
     start = toDatetime(mark[0])
     end = toDatetime(mark[-1])
     label = raw[ix-config.n_decoder_block_size-config.n_predict_block_size:ix]
@@ -132,7 +132,9 @@ if run_predict == 'y':
     label = torch.stack((max_values, min_values), dim=1)
     label = label.to(pred.device)
     loss = criterion(pred, label)
-    pdb.set_trace()
+    # Add penalty for incorrect order (predicted max < predicted min)
+    penalty = torch.clamp(pred[:, 1] - pred[:, 0], min=0).mean()
+    loss = loss + penalty
     print("%s to %s" %(start.strftime("%B %d %Y %H:%M"),
         end.strftime("%B %d %Y %H:%M")))
     print("Predict loss is ", loss.item())

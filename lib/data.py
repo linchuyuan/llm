@@ -63,7 +63,7 @@ class DataFrame(object):
                 # TODO: make it configurable from the main script
                 # self.data = self.data.loc[self.data['Volume'] >= 10]
                 pass
-            self.dataFlush()
+            self.dataFlush(self.db_file)
         # if not self.is_option:
         #     self.data = self.data.loc[self.data.index >= '2024-9-13 15:59:00']
         self.addTemporalData(self.data)
@@ -98,9 +98,9 @@ class DataFrame(object):
             print("Unable to load history from db: ", ex)
             return None
 
-    def dataFlush(self):
+    def dataFlush(self, filename):
         if self.data is not None:
-            self.data.to_pickle(self.db_file)
+            self.data.to_pickle(filename)
 
     def tradingAvailable(self):
         curr = datetime.datetime.now(pytz.timezone('US/Eastern'))
@@ -126,7 +126,13 @@ class DataFrame(object):
     """
     align option db and stock db
     """
-    def align(self, to, encoder_block_size:int = 10000):
+    def align(self, to, encoder_block_size:int = 6000):
+        cache_filename = self.db_file + "_cache"
+        try:
+            self.data = torch.load(cache_filename)
+            return
+        except:
+            print("failed to load from cache, redo align")
         T_total = len(to.data_frame)
         self.data_frame = self.data_frame.drop(columns='Symbol')
         _, C_data = self.data_frame.shape
@@ -149,6 +155,7 @@ class DataFrame(object):
         years = self.data[:, :, -6]
         years = torch.where(years == 0, years + 2020, years)
         self.data[:, :, -6] = years
+        torch.save(self.data, cache_filename)
 
     def getOptionBatch(self, seed:list):
         x = self.data[:,:,:-6]

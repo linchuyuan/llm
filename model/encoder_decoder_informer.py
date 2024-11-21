@@ -155,6 +155,9 @@ def estimate_loss(model, config, criterion, get_batch, eval_iters=10):
             # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
             #    y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
             loss = criterion(logits, label)
+            # Add penalty for incorrect order (predicted max < predicted min)
+            penalty = torch.clamp(logits[:, 1] - logits[:, 0], min=0).mean()
+            loss = loss + penalty
             losses[k] = loss.item()
         out[split] = losses.mean()
     model.train()
@@ -247,9 +250,10 @@ def train_and_update(model, config, get_batch, epoch, eval_interval):
         min_values, _ = torch.min(label, dim=1)  # Shape [B]
         label = torch.stack((max_values, min_values), dim=1)
         label = label.to(logits.device)
-        # loss = criterion(logits[:,-config.n_predict_block_size:, _pred_start:_pred_end],
-        #    y[:,-config.n_predict_block_size:,_pred_start:_pred_end])
         loss = criterion(logits, label)
+        # Add penalty for incorrect order (predicted max < predicted min)
+        penalty = torch.clamp(logits[:, 1] - logits[:, 0], min=0).mean()
+        loss = loss + penalty
 
         print("Loop %s, %s, speed %s b/s" % (
             i, round(loss.item(), 2), round(i / (time.time() - start_time), 2)), end='\r')
