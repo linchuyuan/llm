@@ -3,7 +3,7 @@ import sys
 
 sys.setrecursionlimit(6000)
 LOG = False
-LOSS_SCALE = 5
+LOSS_SCALE = 8.3
 PERCENTAGE_UP = 0.5
 PERCENTAGE_DOWN = (1 - PERCENTAGE_UP)
 
@@ -38,31 +38,32 @@ def dfs(mep, p2, p1, cur, max_step=10,
                 exp = -premium * LOSS_SCALE
             else:
                 # stand alone options
+                raise
                 log("winning case cur %s, step %s, p1 %s, p2 %s, is_put %s" %( cur, 
                     step, p1, p2, is_put))
                 exp = abs(cur - p2) - (premium * LOSS_SCALE)
             total = total_case + 1
             win = win_case + (1 if exp > 0 else 0)
-        elif cur == p1 + 1:
+        elif cur == p1 and False:
             log("remove p2 %s, cur %s, step %s" % (p2, cur, step))
             # no more p1 and effectively move p2 to a lower number for put spread or higher for call spread
             if is_put:
-                expected_u, total_u, win_u = dfs(mem, p2-(abs(p1-p2)), 0xffff, cur+1,
+                expected_u, total_u, win_u = dfs(mem, p2-(abs(p1-p2)), 0xffff, cur+.02,
                     max_step, step+1, expected, total_case, win_case)
-                expected_d, total_d, win_d = dfs(mem, p2-(abs(p1-p2)), 0xffff, cur-1,
+                expected_d, total_d, win_d = dfs(mem, p2-(abs(p1-p2)), 0xffff, cur-.02,
                     max_step, step+1, expected, total_case, win_case)
             else:
-                expected_u, total_u, win_u = dfs(mem, p2+(abs(p1-p2)), 0, cur+1,
+                expected_u, total_u, win_u = dfs(mem, p2+(abs(p1-p2)), 0, cur+.02,
                     max_step, step+1, expected, total_case, win_case)
-                expected_d, total_d, win_d = dfs(mem, p2+(abs(p1-p2)), 0, cur-1,
+                expected_d, total_d, win_d = dfs(mem, p2+(abs(p1-p2)), 0, cur-.02,
                     max_step, step+1, expected, total_case, win_case)
             exp = PERCENTAGE_UP * expected_u + PERCENTAGE_DOWN * expected_d
             total = total_u + total_d
             win = win_u + win_d
         else:
-            expected_u, total_u, win_u = dfs(mem, p2, p1, cur+1,
+            expected_u, total_u, win_u = dfs(mem, p2, p1, cur+.02,
                 max_step, step+1, expected, total_case, win_case)
-            expected_d, total_d, win_d = dfs(mem, p2, p1, cur-1,
+            expected_d, total_d, win_d = dfs(mem, p2, p1, cur-.02,
                 max_step, step+1, expected, total_case, win_case)
             exp = PERCENTAGE_UP * expected_u + PERCENTAGE_DOWN * expected_d
             total = total_u + total_d
@@ -76,11 +77,11 @@ def dfs(mep, p2, p1, cur, max_step=10,
     mem[cur][step][p1] = (exp, total, win)
     return mem[cur][step][p1]
 
-for p1 in range(400, 551):
-    for spread in range(1, 10):
+for p1 in range(500, 570):
+    for spread in range(5, 6):
         p2 = p1 - spread
         mem = dict()
-        exp, total, win = dfs(mem, p2, p1, 550, max_step=150, step=0)
+        exp, total, win = dfs(mem, p2, p1, 560, max_step=2000, step=0)
         print("expected value %.20f, winrate %.2f%%, p2 %s, p1 %s" %(exp,  (win/total)*100, p2, p1))
 
 
